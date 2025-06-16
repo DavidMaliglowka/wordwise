@@ -3,6 +3,7 @@ import { AuthProvider, useAuthContext } from '../contexts/AuthContext';
 import { AuthPage } from '../pages/AuthPage';
 import { FirestoreTest } from './test/FirestoreTest';
 import { StorageTest } from './test/StorageTest';
+import { SecurityTest } from './test/SecurityTest';
 import Avatar from 'components/Avatar'
 import logo from 'assets/logo.svg'
 
@@ -48,6 +49,7 @@ const Dashboard: React.FC = () => {
 
           {/* Test Components */}
           <div className="mt-12 mb-12 space-y-8">
+            <SecurityTest />
             <FirestoreTest />
             <StorageTest />
           </div>

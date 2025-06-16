@@ -12,6 +12,7 @@ import {
 import { auth } from '../lib/firebase';
 import { FirestoreService } from '../services/firestore';
 import { User, UserSettings } from '../types/firestore';
+import { SecurityValidator, SecurityMonitor, RateLimiter } from '../lib/security';
 
 export interface AuthError {
   code: string;
@@ -133,6 +134,20 @@ export const useAuth = (): UseAuthReturn => {
   }, []);
 
     const signUp = async (email: string, password: string, displayName?: string) => {
+    // Rate limiting check
+    if (!RateLimiter.isAllowed('auth', 10)) {
+      const authError: AuthError = {
+        code: 'rate-limited',
+        message: 'Too many authentication attempts. Please try again later.'
+      };
+      setState(prev => ({ ...prev, error: authError }));
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_failure',
+        details: { reason: 'rate_limited', action: 'signup' }
+      });
+      throw authError;
+    }
+
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
@@ -144,6 +159,13 @@ export const useAuth = (): UseAuthReturn => {
         await updateProfile(userCredential.user, { displayName });
       }
 
+      // Log successful signup
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_success',
+        userId: userCredential.user.uid,
+        details: { action: 'signup', method: 'email' }
+      });
+
       // The user profile will be created automatically by the onAuthStateChanged listener
       return userCredential.user;
     } catch (error: any) {
@@ -151,16 +173,45 @@ export const useAuth = (): UseAuthReturn => {
         code: error.code,
         message: error.message
       };
+
+      // Log failed signup
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_failure',
+        details: { action: 'signup', method: 'email', error: error.code }
+      });
+
       setState(prev => ({ ...prev, loading: false, error: authError }));
       throw authError;
     }
   };
 
   const signIn = async (email: string, password: string) => {
+    // Rate limiting check
+    if (!RateLimiter.isAllowed('auth', 10)) {
+      const authError: AuthError = {
+        code: 'rate-limited',
+        message: 'Too many authentication attempts. Please try again later.'
+      };
+      setState(prev => ({ ...prev, error: authError }));
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_failure',
+        details: { reason: 'rate_limited', action: 'signin' }
+      });
+      throw authError;
+    }
+
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      // Log successful signin
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_success',
+        userId: userCredential.user.uid,
+        details: { action: 'signin', method: 'email' }
+      });
+
       // The user profile will be loaded automatically by the onAuthStateChanged listener
       return userCredential.user;
     } catch (error: any) {
@@ -168,16 +219,45 @@ export const useAuth = (): UseAuthReturn => {
         code: error.code,
         message: error.message
       };
+
+      // Log failed signin
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_failure',
+        details: { action: 'signin', method: 'email', error: error.code }
+      });
+
       setState(prev => ({ ...prev, loading: false, error: authError }));
       throw authError;
     }
   };
 
   const signInWithGoogle = async () => {
+    // Rate limiting check
+    if (!RateLimiter.isAllowed('auth', 10)) {
+      const authError: AuthError = {
+        code: 'rate-limited',
+        message: 'Too many authentication attempts. Please try again later.'
+      };
+      setState(prev => ({ ...prev, error: authError }));
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_failure',
+        details: { reason: 'rate_limited', action: 'google_signin' }
+      });
+      throw authError;
+    }
+
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
       const userCredential = await signInWithPopup(auth, googleProvider);
+
+      // Log successful Google signin
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_success',
+        userId: userCredential.user.uid,
+        details: { action: 'signin', method: 'google' }
+      });
+
       // The user profile will be created/loaded automatically by the onAuthStateChanged listener
       return userCredential.user;
     } catch (error: any) {
@@ -185,6 +265,13 @@ export const useAuth = (): UseAuthReturn => {
         code: error.code,
         message: error.message
       };
+
+      // Log failed Google signin
+      SecurityMonitor.logSecurityEvent({
+        type: 'auth_failure',
+        details: { action: 'signin', method: 'google', error: error.code }
+      });
+
       setState(prev => ({ ...prev, loading: false, error: authError }));
       throw authError;
     }

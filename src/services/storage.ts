@@ -13,6 +13,7 @@ import {
   FullMetadata
 } from 'firebase/storage';
 import { storage } from '../lib/firebase';
+import { SecurityValidator, SecurityMonitor, RateLimiter, SECURITY_CONFIG } from '../lib/security';
 
 // Types for upload progress and results
 export interface UploadProgress {
@@ -53,6 +54,25 @@ export const StoragePaths = {
 
 // Main Storage Service
 export class StorageService {
+  // Validate file before upload
+  private static validateFileForUpload(file: File, category: 'images' | 'documents'): void {
+    // Check file type
+    if (!SecurityValidator.isValidFileType(file, category)) {
+      throw new Error(`Invalid file type: ${file.type}. Only allowed types for ${category} are supported.`);
+    }
+
+    // Check file size
+    const sizeCategory = category === 'images' ? 'PROFILE_IMAGE' : 'DOCUMENT';
+    if (!SecurityValidator.isValidFileSize(file, sizeCategory as any)) {
+      throw new Error(`File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB. Maximum size allowed is ${(SECURITY_CONFIG.MAX_FILE_SIZES[sizeCategory as keyof typeof SECURITY_CONFIG.MAX_FILE_SIZES] / 1024 / 1024).toFixed(2)}MB.`);
+    }
+
+    // Rate limiting for uploads
+    if (!RateLimiter.isAllowed('file_upload', 20)) {
+      throw new Error('Too many file uploads. Please wait before uploading more files.');
+    }
+  }
+
   // Upload file with progress tracking
   static uploadFile(
     path: string,
@@ -61,6 +81,26 @@ export class StorageService {
     onProgress?: (progress: UploadProgress) => void
   ): Promise<{ downloadURL: string; metadata: FullMetadata }> {
     return new Promise((resolve, reject) => {
+      try {
+        // Validate file before upload
+        const category = file.type.startsWith('image/') ? 'images' : 'documents';
+        this.validateFileForUpload(file, category);
+
+        // Log upload attempt
+        SecurityMonitor.logSecurityEvent({
+          type: 'file_upload',
+          details: {
+            fileName: SecurityValidator.sanitizeFilename(file.name),
+            fileType: file.type,
+            fileSize: file.size,
+            path: path
+          }
+        });
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
       console.log('📁 Uploading to path:', path);
       console.log('👤 Current user from storage context:', storage.app.options);
       const storageRef = ref(storage, path);

@@ -62,7 +62,7 @@
               2
             ],
             "details": "Configure storage buckets, integrate file upload/download functionalities, and manage storage regions and rules.\n<info added on 2025-06-16T21:58:53.078Z>\nFirebase Storage has been fully configured and deployed. Firebase Console now shows Storage enabled with up-to-date security rules applied. All services are ready for testing, including file operations such as upload, download, delete, and metadata management. A StorageTest component is available at localhost:5173 for live verification, with tests covering profile images (5MB limit), brand assets (25MB limit), and documents (50MB limit). Additional features include file listing, download URL generation, progress tracking, and enforced security measures like user isolation, file type checks, and size restrictions.\n</info added on 2025-06-16T21:58:53.078Z>",
-            "status": "in-progress"
+            "status": "done"
           },
           {
             "id": 5,
@@ -73,7 +73,7 @@
               4
             ],
             "details": "Develop rules that enforce HTTPS access, restrict unauthenticated access, and test the rules using Firebase emulators or simulators.",
-            "status": "pending"
+            "status": "in-progress"
           }
         ]
       },
@@ -690,7 +690,7 @@
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-16T21:49:37.060Z",
+      "updated": "2025-06-16T22:31:55.714Z",
       "description": "Tasks for master context"
     }
   }
