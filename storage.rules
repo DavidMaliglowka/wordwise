@@ -1,0 +1,112 @@
+rules_version = '2';
+
+// Production Firebase Storage Security Rules for WordWise AI
+// Fixed to properly handle read vs write operations
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isValidImageType() {
+      return request.resource != null
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'image/jpeg'
+            || request.resource.contentType == 'image/png'
+            || request.resource.contentType == 'image/gif'
+            || request.resource.contentType == 'image/webp');
+    }
+
+    function isValidDocumentType() {
+      return request.resource != null
+        && (request.resource.contentType == 'application/pdf'
+            || request.resource.contentType == 'text/plain'
+            || request.resource.contentType == 'text/markdown'
+            || request.resource.contentType == 'text/csv'
+            || request.resource.contentType == 'application/msword'
+            || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+            || request.resource.contentType == 'application/json'
+            || request.resource.contentType == 'application/xml'
+            || request.resource.contentType == 'application/octet-stream'); // Fallback for some uploads
+    }
+
+    function isValidFileSize(maxSizeInMB) {
+      return request.resource != null
+        && request.resource.size < maxSizeInMB * 1024 * 1024;
+    }
+
+    function isCreateOrEmptyUpload() {
+      return request.resource != null && request.resource.size == 0;
+    }
+
+    // User profile images
+    match /users/{userId}/profile/{fileName} {
+      // Anyone can read their own profile images
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Write rules - handle both create (empty) and finalize (with content)
+      allow write: if isAuthenticated()
+        && isOwner(userId)
+        && (isCreateOrEmptyUpload()
+            || (isValidImageType() && isValidFileSize(5))); // 5MB limit
+    }
+
+    // Brand profile assets
+    match /users/{userId}/brands/{brandId}/{allPaths=**} {
+      // Anyone can read their own brand assets
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Write rules - handle both create and finalize
+      allow write: if isAuthenticated()
+        && isOwner(userId)
+        && (isCreateOrEmptyUpload()
+            || ((isValidImageType() || isValidDocumentType()) && isValidFileSize(25))); // 25MB limit
+    }
+
+    // Document uploads
+    match /users/{userId}/documents/{documentId}/{allPaths=**} {
+      // Anyone can read their own documents
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Write rules - handle both create and finalize
+      allow write: if isAuthenticated()
+        && isOwner(userId)
+        && (isCreateOrEmptyUpload()
+            || ((isValidImageType() || isValidDocumentType()) && isValidFileSize(50))); // 50MB limit
+    }
+
+    // Temporary uploads
+    match /users/{userId}/temp/{fileName} {
+      // Anyone can read their own temp files
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Write rules - more permissive for temporary processing
+      allow write: if isAuthenticated()
+        && isOwner(userId)
+        && (isCreateOrEmptyUpload()
+            || ((isValidImageType() || isValidDocumentType()) && isValidFileSize(100))); // 100MB limit
+    }
+
+    // AI-generated content exports
+    match /users/{userId}/exports/{fileName} {
+      // Users can read their own exports
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Write access for service accounts (Cloud Functions with admin privileges)
+      allow write: if request.auth != null
+        && (request.auth.token.admin == true || request.auth.uid == userId);
+    }
+
+    // Default deny rule
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,47 +1,119 @@
 <context>
 # Overview
-[Provide a high-level overview of your product here. Explain what problem it solves, who it's for, and why it's valuable.]
+WordWise AI is an AI-first writing assistant that helps marketing professionals craft clear, persuasive business communications. Unlike solely rule-based tools, WordWise leverages large language models to provide context-aware, personalised feedback in real time. It reduces costly writing errors, accelerates content creation, and up-skills users over time.
 
 # Core Features
-[List and describe the main features of your product. For each feature, include:
-- What it does
-- Why it's important
-- How it works at a high level]
+	1.	Real-time Grammar & Spelling — Flags errors as the marketer types and offers a concise one-line explanation plus one-click fix.
+	2.	Live Metrics Panel — Continuously displays word count, estimated reading time, and Flesch-Kincaid grade to keep copy within targets.
+	3.	Passive Voice Highlighter — Underlines passive constructions and proposes active-voice rewrites.
+	4.	Personal Dictionary — Lets users add product names, acronyms, and jargon to prevent false positives.
+	5.	Brand-Voice Rewriter — Detects the tone of pasted samples, stores voice guidelines, and generates on-brand alternatives.
+	6.	Content-Type Optimiser — A dropdown (‘email’ | ‘social’) that triggers channel-specific suggestions:
+• Email → five subject-line variants tuned for length and emotion.
+• Social → five first-line hook variants ≤100 chars designed to stop the scroll.
 
 # User Experience
-[Describe the user journey and experience. Include:
-- User personas
-- Key user flows
-- UI/UX considerations]
+
+Persona: Maya, a SaaS marketing manager who writes email campaigns and LinkedIn posts daily.
+
+Key Flow:
+sign-up → create brand profile (upload 3 samples) → new document → select content type → compose → inline suggestions appear → accept / dismiss → click ‘Generate Variants’ → copy-export or save.
+
+UI/UX considerations:
+	•	Distraction-free editor with Tailwind typography.
+	•	Hover cards show explanations without clutter.
+	•	Side drawer for metrics & variant generation.
+	•	All actions keyboard-accessible for speed.
+
+Visual design:
+Home / Documents Dashboard
+
+| Area | Description | Key Components & States | Dev Notes |
+|------|-------------|-------------------------|-----------|
+| **Global Sidebar** (fixed 72 px) | Persistent vertical navigation on every screen. | • **WordWise “W” logo** (click → dashboard)<br>• Links: **Documents** (active), Version History, Trash, Account, **Apps** (badge count), **Get Pro** CTA<br>• Footer: “?” Support tooltip, **Sign out** | Collapse to icon-only rail ≤ 1024 px. Highlight active link with `bg-gray-100` + left border accent. |
+| **Content Header** (sticky) | Utilities for document management. | • H1 **Documents**<br>• **New document** button (primary + icon)<br>• **Upload file** button (secondary)<br>• Search field (≈ 320 px)<br>• Optional sort dropdown | Header sticks while grid scrolls. Buttons call `createDocument()` / `uploadDocument()`. |
+| **Document Grid** | Gallery of past writings. | • Card ≈ 152 × 208 px (desktop); responsive 2-4 columns<br>• Metadata: date stamp, truncated title & snippet<br>• **Score badge** (red-circled number) bottom-left<br>• Quick actions: Download ⬇︎ & Delete 🗑 bottom-right | Use CSS grid masonry (`grid-auto-flow:dense`). Card click → `/doc/:id`. |
+| **Empty & Pagination States** | UX for no docs & infinite scroll. | • Illustration + CTA “Create your first document” when empty<br>• Lazy-load 20 cards per batch; fade-in with Framer Motion | Maintain scroll position on return. |
+
+---
+
+Document Editor
+| Area | Description | Key Components & States | Dev Notes |
+|------|-------------|-------------------------|-----------|
+| **Top Bar** | Lightweight chrome. | • **Back button (WordWise “W” icon)**<br>• Editable title (`contentEditable`; default **Untitled document**)<br>• **Goals** pill → modal (tone, audience, intent)<br>• **Overall Score** chip (real-time) | Height 56 px, sticky. Title auto-saves on blur. |
+| **Main Editor Pane** | Rich-text canvas. | • Lexical/Tiptap editor with placeholder “Type or paste (⌘+V)…”, semantic elements<br>• Inline grammar & passive-voice markup<br>• Footer word-count (sticks bottom-center)<br>• Toolbar bottom-left: **B I U**, H1/H2, lists, link, strikethrough | Suggestion overlays via absolute-position spans. Support standard hotkeys. |
+| **Right Sidebar** (320 px) | Contextual assistant. | • **Review suggestions** (default) → list of issues (empty state shows binoculars illustration + “Nothing to see yet.”)<br>• **Write with generative AI** tab → prompt composer<br>• **Check AI & Plagiarism** tab → locked behind Pro | Collapses to slide-over ≤ 900 px. Stream list via `EventSource`/WebSocket. |
+| **Interactions** | Accept/dismiss & variant generator. | • Hover suggestion → action bar (✓ Accept, ✕ Dismiss, ℹ︎ Explain)<br>• Keyboard: ↑/↓ cycle, ⏎ accept<br>• **Generate Variants** button (channel-specific) → modal with 5 chips; click copies | Endpoint: `/functions/generateVariant`. Disable while loading. |
+| **Responsiveness** | Breakpoint behaviour. | • ≥ 1280 px: three-pane layout<br>• 900-1280 px: sidebar toggles via chevron<br>• ≤ 900 px: full-width editor; assistant opens bottom-sheet | Tailwind `lg`, `md`, `sm`. Animate with Framer Motion. |
 </context>
 <PRD>
 # Technical Architecture
-[Outline the technical implementation details:
-- System components
-- Data models
-- APIs and integrations
-- Infrastructure requirements]
+Frontend:
+- React 18 + Vite + TypeScript (repo scaffolded).
+- Zustand for state; React-Query for server communication.
+- Editor: lexical / tiptap with custom marks for suggestions.
+Backend & AI:
+- Firebase Auth, Firestore, Storage.
+- Cloud Functions (Node 20) orchestrate OpenAI GPT-4o calls with streaming.
+- Edge caching of suggestions keyed by text hash + feature.
+Data Models:
+User {uid, email, tier, settings, dictionary[]}
+BrandProfile {uid, toneEmbedding, styleGuide}
+Document {id, uid, content, contentType, createdAt}
+Suggestion {docId, range, type, original, proposed, explanation, confidence}
+MetricSnapshot {docId, wc, readTime, fkGrade, capturedAt}
+Infrastructure:
+- GitHub Actions → Firebase Hosting (CDN) → users.
+- Secrets in Google Secret Manager.
+
 
 # Development Roadmap
-[Break down the development process into phases:
-- MVP requirements
-- Future enhancements
-- Do not think about timelines whatsoever -- all that matters is scope and detailing exactly what needs to be build in each phase so it can later be cut up into tasks]
+
+MVP (Core Clone)
+	•	Bootstrap repo & CI/CD.
+	•	Firebase Auth & Firestore schema.
+	•	Rich-text editor with real-time grammar/spell powered by GPT-4o proof-reading model.
+	•	Live Metrics Panel.
+	•	Passive voice detection.
+	•	Document CRUD & hosting.
+
+AI Enhancement
+	•	Personal Dictionary CRUD and false-positive suppression.
+	•	Brand-Voice training (sample upload) & on-brand rewrites.
+	•	Content-Type dropdown and variant generators (email & social).
+	•	Usage analytics collection.
+
+Future Enhancements
+	•	Team collaboration & commenting.
+	•	Multi-brand management.
+	•	Chrome extension & Gmail plugin.
+	•	Fine-tuning or RAG for domain-specific tone.
 
 # Logical Dependency Chain
-[Define the logical order of development:
-- Which features need to be built first (foundation)
-- Getting as quickly as possible to something usable/visible front end that works
-- Properly pacing and scoping each feature so it is atomic but can also be built upon and improved as development approaches]
+	1.	Repo / tooling / CI.
+	2.	Firebase project & security rules.
+	3.	Auth flow.
+	4.	Editor component.
+	5.	Grammar/spell check endpoint.
+	6.	Metrics panel.
+	7.	Passive-voice logic.
+	8.	Document persistence.
+	9.	Personal dictionary.
+	10.	Brand profile & embeddings.
+	11.	Content-type variant generator.
+	12.	Deploy & bug-bash.
 
 # Risks and Mitigations
-[Identify potential risks and how they'll be addressed:
-- Technical challenges
-- Figuring out the MVP that we can build upon
-- Resource constraints]
+	•	LLM latency → use streaming + optimistic UI fallbacks.
+	•	API cost escalation → cache & batch requests; monitor token usage.
+	•	Suggestion accuracy → gather acceptance telemetry; add feedback toggle.
+	•	Scope creep in 7-day window → freeze to six user stories; time-box each phase.
+	•	Security & privacy → enforce Firebase rules, encrypt PII, never store raw proprietary copy in logs.
 
 # Appendix
-[Include any additional information:
-- Research findings
-- Technical specifications]
+	•	Market data: Grammarly 30 M DAU; $200 M ARR.
+	•	Success metrics: ≥85 % grammar accuracy, <2 s median suggestion latency, ≥80 % suggestion acceptance in user tests.
+	•	Key libraries: lexical editor, OpenAI node sdk, tailwind-merge.
+  • Security Requirements: Firebase Authentication with secure session management, HTTPS everywhere with proper certificate management, Data encryption at rest and in transit
+
 </PRD>

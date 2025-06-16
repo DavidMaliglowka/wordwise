@@ -1,0 +1,697 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Repository and CI/CD",
+        "description": "Bootstrap the React 18 + Vite + TypeScript repository, set up initial project structure, and configure GitHub Actions for CI/CD.",
+        "details": "Initialize a new React project using Vite with TypeScript. Configure ESLint, Prettier. Set up a basic GitHub Actions workflow for linting, building, and potentially testing on push/PR.",
+        "testStrategy": "Verify repository is created, dependencies are installed, and the initial CI workflow runs successfully on GitHub Actions.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Configure Firebase Project and Data Models",
+        "description": "Set up the Firebase project, configure Authentication, Firestore database with necessary collections (User, BrandProfile, Document, Suggestion, MetricSnapshot), and Firebase Storage. Define initial security rules.",
+        "details": "Create a new Firebase project. Enable Authentication (Email/Password, Google). Set up Firestore collections based on the provided data models. Configure Firebase Storage for brand sample uploads. Write basic Firestore and Storage security rules to restrict access based on user authentication (uid). Ensure HTTPS is enforced.",
+        "testStrategy": "Verify Firebase project is created, services are enabled, collections/storage buckets exist, and basic security rules are applied and tested via Firebase emulator or console.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set Up Firebase Project",
+            "description": "Create a new project in the Firebase Console and configure the project settings via Firebase CLI as needed.",
+            "dependencies": [],
+            "details": "Establish the Firebase project environment, integrate project identification, and set up billing and linking configurations if necessary.",
+            "status": "done"
+          },
+          {
+            "id": 2,
+            "title": "Enable Firebase Authentication",
+            "description": "Activate and configure the Firebase Authentication service to manage user sign-in processes.",
+            "dependencies": [
+              1
+            ],
+            "details": "Select appropriate authentication providers, register sign-in methods, and test authentication flows.",
+            "status": "done"
+          },
+          {
+            "id": 3,
+            "title": "Create Firestore Collections",
+            "description": "Set up Firestore collections for Users, BrandProfile, Document, Suggestion, and MetricSnapshot.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Design the schema for each collection, define document structures, and use Firebase CLI or Console for collection creation.\n<info added on 2025-06-16T21:26:02.982Z>\nSuccessfully implemented Firestore collections and service layer. Comprehensive TypeScript interfaces have been defined for all models, including User, BrandProfile, Document, Suggestion, and MetricSnapshot. The Firestore service layer now supports full CRUD operations, secured by detailed security rules enforcing user-based data isolation. Additionally, the authentication system has been enhanced to auto-create user profiles, and a test component is in place to verify the correctness of all operations. All Firestore collections are fully prepared for the WordWise AI application.\n</info added on 2025-06-16T21:26:02.982Z>",
+            "status": "done"
+          },
+          {
+            "id": 4,
+            "title": "Configure Firebase Storage",
+            "description": "Set up Firebase Storage to manage file uploads and ensure integration with the Firebase project.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Configure storage buckets, integrate file upload/download functionalities, and manage storage regions and rules.\n<info added on 2025-06-16T21:58:53.078Z>\nFirebase Storage has been fully configured and deployed. Firebase Console now shows Storage enabled with up-to-date security rules applied. All services are ready for testing, including file operations such as upload, download, delete, and metadata management. A StorageTest component is available at localhost:5173 for live verification, with tests covering profile images (5MB limit), brand assets (25MB limit), and documents (50MB limit). Additional features include file listing, download URL generation, progress tracking, and enforced security measures like user isolation, file type checks, and size restrictions.\n</info added on 2025-06-16T21:58:53.078Z>",
+            "status": "in-progress"
+          },
+          {
+            "id": 5,
+            "title": "Implement Basic Security Rules",
+            "description": "Write security rules to enforce HTTPS and restrict access to authenticated users for both Firestore and Storage.",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "Develop rules that enforce HTTPS access, restrict unauthenticated access, and test the rules using Firebase emulators or simulators.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Implement User Authentication",
+        "description": "Implement user authentication flows: sign-up, sign-in, and sign-out using Firebase Authentication in the React frontend.",
+        "details": "Use Firebase Auth SDK in the React application. Create UI components for sign-up and sign-in forms. Implement logic to call Firebase Auth methods. Manage user session state using Zustand or React Context. Ensure secure session management practices are followed.",
+        "testStrategy": "Test user registration, login with valid/invalid credentials, and logout. Verify user state is correctly managed across sessions.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Develop Authentication UI Components",
+            "description": "Design and implement the UI components for user sign-up, sign-in, and sign-out flows in the React application.",
+            "dependencies": [],
+            "details": "Create forms for sign-up and sign-in, design feedback/error messages, and implement a sign-out button. Ensure the UI is user-friendly and consistent with the overall app design.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Integrate Firebase Auth Methods",
+            "description": "Connect the UI components with Firebase Auth services for handling user registration, login, and logout functionalities.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement Firebase functions such as createUserWithEmailAndPassword, signInWithEmailAndPassword, and signOut. Ensure proper error handling and response management for each operation.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Set Up State Management",
+            "description": "Implement state management using either Zustand or React Context to manage the authentication state across the application.",
+            "dependencies": [
+              2
+            ],
+            "details": "Configure a global state store to track user authentication status and related data. Ensure the state updates in response to Firebase Auth events.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Integrate and Test Complete Authentication Flow",
+            "description": "Integrate the UI, Firebase Auth methods, and state management to complete the authentication flows, followed by thorough testing.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Ensure that sign-up, sign-in, and sign-out actions correctly update the UI and global state. Test for edge cases and error scenarios to validate the complete user authentication flow.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Develop Document CRUD Backend Functions",
+        "description": "Develop Cloud Functions (Node 20) for Document CRUD operations (create, read, update, delete) interacting with Firestore.",
+        "details": "Create Firebase Cloud Functions using Node.js (v20). Implement endpoints/functions for creating new documents (associating with user uid), fetching documents (list for a user, single by ID), updating document content, and deleting documents. Ensure functions enforce security rules based on the authenticated user's uid. Use Firebase Admin SDK.",
+        "testStrategy": "Write unit tests for Cloud Functions. Manually test CRUD operations via Firebase emulator or deployed functions using authenticated requests.",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Develop Create Document Cloud Function",
+            "description": "Implement a Cloud Function to create new documents in Firestore, integrating Firebase Admin SDK and enforcing user authentication.",
+            "dependencies": [],
+            "details": "Set up a Cloud Function endpoint to handle POST requests. Validate incoming data, enforce user authentication, and use the Firebase Admin SDK to write new documents to Firestore. Include comprehensive error handling and proper response management.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Develop Read Document Cloud Function",
+            "description": "Implement a Cloud Function to retrieve documents from Firestore with secure access.",
+            "dependencies": [
+              1
+            ],
+            "details": "Set up a Cloud Function endpoint to handle GET requests. Use the Firebase Admin SDK to query and retrieve documents from Firestore. Validate user identity and permissions before allowing access, and ensure proper error handling and response formatting.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Develop Update Document Cloud Function",
+            "description": "Implement a Cloud Function to update existing Firestore documents securely.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Create a Cloud Function endpoint for handling PUT requests. Validate input data and user permissions, then use the Firebase Admin SDK to update the specified document in Firestore. Include robust error handling, input validation, and security checks to ensure data integrity.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Develop Delete Document Cloud Function",
+            "description": "Implement a Cloud Function to delete documents from Firestore while enforcing user authentication.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Set up a Cloud Function endpoint for DELETE requests. Leverage the Firebase Admin SDK to remove documents from Firestore, and incorporate strict user authentication and authorization checks. Ensure appropriate error handling and security logging to track deletion events.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Build Documents Dashboard UI",
+        "description": "Build the Documents Dashboard UI including the global sidebar, content header (New document, Upload, Search), and the document grid gallery.",
+        "details": "Implement the layout using React and Tailwind CSS, adhering to the specified structure (fixed sidebar, sticky header, grid). Use React-Query to fetch the list of documents for the logged-in user from the backend functions (Task 4). Implement infinite scroll/pagination (lazy-load 20 cards). Design document cards with metadata and quick actions. Implement empty state UI. Ensure responsiveness (sidebar collapse ≤ 1024 px).",
+        "testStrategy": "Verify layout responsiveness. Test fetching and displaying documents. Test pagination/infinite scroll. Verify 'New document' button triggers document creation flow. Test empty state display.",
+        "priority": "medium",
+        "dependencies": [
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Setup Global Sidebar and Layout Structure",
+            "description": "Create the base structure of the dashboard including a global sidebar for navigation. Establish overall layout and routing scaffolding.",
+            "dependencies": [],
+            "details": "Develop a responsive sidebar with navigation links, ensuring proper hierarchy and styling. Establish foundational styles and basic component structure.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Implement Content Header with Action Buttons",
+            "description": "Design and implement the content header area that includes page title and primary action buttons for document operations.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create the content header UI component with buttons for adding or filtering documents. Ensure proper placement relative to the global sidebar and consistency with design guidelines.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Develop Document Grid Gallery UI",
+            "description": "Build the document gallery grid layout which displays document thumbnails or list items in a clean, organized manner.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement a grid layout component to dynamically render document cards. Focus on modular design, card interactions, and styling for visual clarity.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Integrate Infinite Scroll/Pagination",
+            "description": "Implement infinite scrolling or pagination for the document grid to efficiently load documents as users scroll.",
+            "dependencies": [
+              3
+            ],
+            "details": "Develop logic for fetching additional data when the user reaches a scroll threshold. Optimize performance and include loading states. Test for both infinite scroll and pagination behavior.",
+            "status": "pending"
+          },
+          {
+            "id": 5,
+            "title": "Backend Data Integration and Responsive Design",
+            "description": "Connect UI components to backend data fetching and ensure that the dashboard is fully responsive across devices.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Implement API integration for all document-related data and handle error states. Refine UI components to adjust for various screen sizes and test responsiveness thoroughly.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Integrate Rich-Text Editor Component",
+        "description": "Integrate a rich-text editor component (Lexical or Tiptap) into the application, setting up basic content editing capabilities and a placeholder.",
+        "details": "Choose either Lexical or Tiptap. Integrate the editor into a React component. Configure it for basic text input, semantic elements, and a placeholder ('Type or paste (⌘+V)…'). Set up state management for the editor content. Implement the bottom-left toolbar with basic formatting (B, I, U, H1/H2, lists, link, strikethrough). Ensure standard hotkeys are supported.",
+        "testStrategy": "Verify text input, formatting, and hotkeys work correctly. Ensure placeholder is displayed when empty. Test content persistence within the component.",
+        "priority": "high",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Evaluate and Select Rich-Text Editor Library",
+            "description": "Research and compare Lexical and Tiptap for integration with React, considering factors like community support, compatibility, and ease of use.",
+            "dependencies": [],
+            "details": "Review documentation, experiment with demos, and decide which editor best fits the requirements of the application.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Set Up Basic Content Editing Capabilities",
+            "description": "Integrate the selected rich-text editor into the React application and configure the basic content editing features.",
+            "dependencies": [
+              1
+            ],
+            "details": "Install necessary packages, add editor component to the UI, and ensure that basic text entry and editing work correctly.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Configure Toolbar with Formatting Options",
+            "description": "Develop and integrate a toolbar for the rich-text editor that provides formatting options such as bold, italic, underline, and others.",
+            "dependencies": [
+              2
+            ],
+            "details": "Customize the toolbar to handle common formatting actions, ensuring a user-friendly interface and responsive design.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Implement and Manage Editor State",
+            "description": "Establish proper state management for the rich-text editor to handle content changes, undo/redo actions, and persistence.",
+            "dependencies": [
+              3
+            ],
+            "details": "Set up React state or use external libraries (e.g., Redux) to manage editor state, ensuring consistency and scalability.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Develop Grammar/Spell Check AI Endpoint",
+        "description": "Create a Cloud Function endpoint that accepts text input and returns grammar and spelling suggestions using the OpenAI GPT-4o proof-reading model.",
+        "details": "Create a Firebase Cloud Function. Use the OpenAI Node SDK to call the GPT-4o model with a prompt engineered for grammar and spelling correction. The function should accept text and return a structured list of suggestions (range, type, original, proposed, explanation). Implement edge caching keyed by text hash + feature to reduce latency and cost. Handle streaming responses from OpenAI.",
+        "testStrategy": "Write unit tests for the function logic. Test the endpoint with various text inputs (correct, incorrect grammar/spelling) and verify the structure and content of the suggestions returned. Measure latency.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Environment Setup and Architecture Design",
+            "description": "Set up the Cloud Function environment and design the overall architecture for integrating the GPT-4o model.",
+            "dependencies": [],
+            "details": "Define cloud resource configurations, outline the data flow, and create architecture diagrams to ensure all components, including AI integration and caching, are accounted for.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Integrate OpenAI GPT-4o API",
+            "description": "Develop and test the integration with the GPT-4o API, ensuring proper authentication and network configuration.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement the API call logic, handle authentication tokens, and verify connectivity with the OpenAI endpoint.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Prompt Engineering and Streaming Response Handling",
+            "description": "Design and implement the prompt for grammar and spell checking along with handling the streaming responses from GPT-4o.",
+            "dependencies": [
+              2
+            ],
+            "details": "Develop effective prompts, set up event handlers for streaming data, and manage data flow to process partial responses.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Edge Caching Implementation Based on Text Hash",
+            "description": "Implement a caching mechanism based on a text hash to enhance performance and reduce latency for repeated requests.",
+            "dependencies": [
+              2
+            ],
+            "details": "Design a strategy to generate unique hashes from texts, manage cache storage and invalidation policies, and integrate caching with Cloud Functions.",
+            "status": "pending"
+          },
+          {
+            "id": 5,
+            "title": "Error Handling, Logging, and Performance Optimization",
+            "description": "Incorporate robust error handling, logging mechanisms, and conduct performance testing to ensure reliability and efficiency.",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "Implement exception handling for API and caching errors, set up logging for debugging and monitoring, and perform load testing under various latency scenarios.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Integrate Real-time Grammar/Spell Suggestions in Editor",
+        "description": "Integrate the real-time grammar and spelling suggestions from the backend endpoint into the rich-text editor UI.",
+        "details": "In the editor component, implement logic to send editor content to the grammar/spell check endpoint (Task 7) as the user types (with debouncing). Parse the suggestions received. Implement custom marks/decorations in the editor (Lexical/Tiptap) to underline or highlight suggested ranges. Implement hover cards to display the explanation and action bar (Accept, Dismiss, Explain). Implement keyboard accessibility for cycling through and accepting suggestions.",
+        "testStrategy": "Verify suggestions appear inline as typing occurs. Test hover cards and action bar interactions (click/keyboard). Verify accepting a suggestion replaces the text correctly. Test dismissing a suggestion removes the highlight.",
+        "priority": "high",
+        "dependencies": [
+          6,
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Debounce Mechanism",
+            "description": "Develop a debounce function to delay the processing of user input, reducing the frequency of API calls.",
+            "dependencies": [],
+            "details": "Ensure that the debounce timing is optimized to balance responsiveness with reduced API load.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Integrate AI Endpoint for Real-time Suggestions",
+            "description": "Implement the integration with the AI backend to retrieve grammar and spell suggestions based on debounced input.",
+            "dependencies": [
+              1
+            ],
+            "details": "Design the API request structure and error handling routines to manage potential latency and failures.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Parse and Process Suggestions",
+            "description": "Develop a module to parse responses from the AI endpoint and transform them into a format that can be used for UI components.",
+            "dependencies": [
+              2
+            ],
+            "details": "Create robust parsing logic to handle different response formats and edge cases, ensuring data consistency.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Implement Custom Marks for Dynamic Highlights",
+            "description": "Integrate custom mark features into the rich-text editor to visually indicate grammar and spelling issues.",
+            "dependencies": [
+              3
+            ],
+            "details": "Focus on rendering dynamic, real-time highlights that update seamlessly as suggestions change.",
+            "status": "pending"
+          },
+          {
+            "id": 5,
+            "title": "Develop Interactive Hover Cards with Keyboard Accessibility",
+            "description": "Create custom hover cards that display detailed suggestions, ensuring that they are fully accessible via keyboard interactions.",
+            "dependencies": [
+              4
+            ],
+            "details": "Implement proper focus management and ARIA roles to maintain accessibility and user experience standards.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Implement Live Metrics Panel",
+        "description": "Implement the Live Metrics Panel UI in the right sidebar and integrate real-time calculation and display of word count, estimated reading time, and Flesch-Kincaid grade.",
+        "details": "Create the UI component for the right sidebar metrics panel using React and Tailwind. Implement logic to calculate word count, estimated reading time (e.g., 200 words/minute), and Flesch-Kincaid grade based on the editor content. Update these metrics in real-time as the user types. Display the metrics in the panel. Ensure the footer word count sticks bottom-center.",
+        "testStrategy": "Verify metrics update accurately and in real-time as text is added/removed. Test calculations for word count, reading time, and Flesch-Kincaid score with sample texts.",
+        "priority": "medium",
+        "dependencies": [
+          6
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design Live Metrics UI",
+            "description": "Design the UI elements for the Live Metrics Panel, focusing on the right sidebar layout and footer positioning.",
+            "dependencies": [],
+            "details": "Create mockups and design prototypes for the panel, ensuring responsive design and proper alignment of sidebar components and footer placement.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Develop Real-Time Metrics Calculation",
+            "description": "Implement the logic to calculate word count, estimated reading time, and Flesch-Kincaid grade in real time.",
+            "dependencies": [],
+            "details": "Set up algorithms for text analysis with live updating capabilities, ensuring accurate and efficient computation of metrics.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Integrate UI with Real-Time Logic",
+            "description": "Combine the designed UI with the real-time calculation logic and adjust layout for consistency.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Integrate the UI components with the backend logic, test for responsiveness and proper layout updating, and ensure that the footer and sidebar remain correctly positioned during live updates.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Develop Passive Voice Detection AI Endpoint",
+        "description": "Develop a Cloud Function endpoint to detect passive voice constructions in text and propose active-voice rewrites using GPT-4o.",
+        "details": "Create a Firebase Cloud Function similar to the grammar check endpoint. Use GPT-4o with a prompt specifically designed to identify passive voice and suggest active voice alternatives. Return suggestions in the same structured format (range, type='passive', original, proposed, explanation). Leverage the caching mechanism established in Task 7.",
+        "testStrategy": "Test the endpoint with sentences containing passive voice. Verify accurate detection and relevant active voice suggestions are returned in the correct format.",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Define Architecture and Requirements",
+            "description": "Outline the overall design for the Cloud Function, including integration with GPT-4o, the passive voice detection logic, and caching mechanism similar to the grammar check endpoint.",
+            "dependencies": [],
+            "details": "Establish technical requirements, data flow diagrams, and interface contracts for each component of the system.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Craft Specific Passive Voice Detection Prompt",
+            "description": "Develop a detailed prompt tailored for detecting passive voice using GPT-4o, ensuring robust detection and appropriate response formatting.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create prompt options, test with sample texts, and refine the language instructions to accurately capture passive constructs.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Implement Cloud Function & Structured Response Formatting",
+            "description": "Develop the Cloud Function that calls GPT-4o with the crafted passive voice detection prompt and implements structured response formatting.",
+            "dependencies": [
+              2
+            ],
+            "details": "Write the function code, set up API calls, process GPT-4o responses, and ensure output adheres to the defined formatting structure.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Integrate Caching Mechanism",
+            "description": "Incorporate caching mechanisms similar to the grammar check endpoint to optimize performance and reduce redundant API calls.",
+            "dependencies": [
+              3
+            ],
+            "details": "Design and implement caching strategies, using suitable cache storage, and test for efficiency and correctness under various loads.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Integrate Passive Voice Suggestions in Editor",
+        "description": "Integrate the passive voice suggestions from the backend endpoint into the rich-text editor UI, similar to grammar/spell check.",
+        "details": "Extend the editor integration logic (Task 8) to also send content to the passive voice endpoint (Task 10). Implement distinct highlighting/underlining for passive voice suggestions. Reuse or adapt the hover card and action bar components for passive voice suggestions (Accept, Dismiss, Explain). Ensure keyboard navigation includes passive voice suggestions.",
+        "testStrategy": "Verify passive voice constructions are highlighted in the editor. Test hover cards and actions for passive voice suggestions. Ensure grammar/spell and passive voice suggestions coexist correctly.",
+        "priority": "medium",
+        "dependencies": [
+          6,
+          10
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Analyze and Document Existing Editor Logic",
+            "description": "Review and document the current rich-text editor architecture and integration points, focusing on grammar and spell-check functionalities to identify potential integration areas for passive voice suggestions.",
+            "dependencies": [],
+            "details": "Examine how the editor processes suggestions, and note any existing data structures or event handling that will be extended to support passive voice detection. Create a documentation file listing key modules and components.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Extend Logic for Passive Voice Detection",
+            "description": "Modify and extend the existing suggestion logic to detect and handle passive voice usage, ensuring seamless operation alongside grammar and spell-check suggestions.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement new functions or modify existing ones to analyze sentence structure for passive voice patterns. Ensure that the passive voice detection can correctly trigger suggestions without interfering with other editor functionalities.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Implement Distinct Highlighting for Passive Voice Suggestions",
+            "description": "Develop and integrate a distinct visual highlighting mechanism for passive voice suggestions within the rich-text editor, differentiating them from other types of suggestions.",
+            "dependencies": [
+              2
+            ],
+            "details": "Define new CSS classes or styles for passive voice suggestions and integrate these into the editor's rendering logic. Test to ensure that the highlighting stands out and does not conflict with existing styles.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Develop Hover Cards and Keyboard Navigation for Passive Voice Suggestions",
+            "description": "Create interactive hover cards and keyboard navigation features to enhance user interaction with passive voice suggestions, ensuring an intuitive and accessible user experience.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Design the UI component for hover cards that provide detailed info on passive voice usage. Implement keyboard event handlers to allow users to navigate through suggestions using keys, ensuring compliance with accessibility standards.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Implement Personal Dictionary",
+        "description": "Implement backend (Firestore, Cloud Function) and frontend (UI) for managing the user's personal dictionary and integrate it into the suggestion logic to prevent false positives.",
+        "details": "Add a 'dictionary' array field to the User document in Firestore. Create Cloud Functions for adding, removing, and listing dictionary terms. Build a UI component (e.g., in Account settings or a modal) for users to manage their dictionary. Modify the grammar/spell check and passive voice Cloud Functions (Tasks 7, 10) to fetch the user's dictionary and filter out suggestions that match dictionary terms before returning them.",
+        "testStrategy": "Test adding, removing, and listing dictionary terms via the UI and backend. Verify that terms added to the dictionary are no longer flagged as errors or passive voice in the editor.",
+        "priority": "medium",
+        "dependencies": [
+          4,
+          11
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Update Firestore User Documents",
+            "description": "Modify the Firestore schema to include personal dictionary fields in user documents.",
+            "dependencies": [],
+            "details": "Review the current Firestore structure, design the dictionary field schema, update user documents to include word lists, and ensure proper indexing and security rules are applied.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Create Cloud Functions for CRUD Operations",
+            "description": "Develop Cloud Functions to handle Creating, Reading, Updating, and Deleting dictionary terms.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement endpoints for dictionary term management, integrate authentication checks, and ensure these functions interact properly with the updated Firestore schema.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Build the Dictionary Management UI",
+            "description": "Design and implement a user interface that allows users to manage their personal dictionary.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Develop the frontend components for viewing, adding, editing, and deleting dictionary words. Ensure that the UI communicates with the Cloud Functions and handles validation and error states.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Integrate Dictionary Check Logic into Endpoints",
+            "description": "Enhance the grammar and passive voice endpoints to incorporate personal dictionary checks.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Modify the existing endpoints to include logic that checks against the user's personal dictionary when processing suggestions. Test the integration thoroughly to maintain endpoint performance and accuracy.",
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Setup GitHub Actions CI/CD",
+        "description": "Set up GitHub Actions CI/CD workflow for linting, building, and testing on push and pull requests.",
+        "details": "Create a new workflow file (e.g., `ci.yml`) in the `.github/workflows` directory. Configure the workflow to trigger on `push` and `pull_request` events targeting the main branch. Define jobs for:\n1.  **Linting**: Run linters (ESLint, Prettier) to ensure code style and quality.\n2.  **Building**: Build the frontend application and potentially the backend Cloud Functions.\n3.  **Testing**: Run unit and integration tests for both frontend and backend code.\n\nUse `actions/checkout` to get the code and `actions/setup-node` to set up the Node.js environment (specify version 20). Use `npm ci` for installing dependencies to ensure deterministic builds. Configure caching for node modules to speed up subsequent runs. Ensure the necessary scripts (`lint`, `build`, `test`) are defined in `package.json` and are executed correctly in the workflow.",
+        "testStrategy": "Create a pull request with some code changes to trigger the workflow. Push changes directly to a feature branch and then to the main branch (if allowed) to test push triggers. Verify that the workflow runs automatically for both events. Check the GitHub Actions UI to ensure all steps (lint, build, test) pass successfully. Introduce intentional errors (e.g., linting error, failing test) in a test branch to confirm the workflow fails as expected.",
+        "status": "pending",
+        "dependencies": [
+          1,
+          3,
+          4
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Initialize GitHub Actions Workflow",
+            "description": "Create the basic GitHub Actions YAML file to define the workflow structure.",
+            "dependencies": [],
+            "details": "Set up a .github/workflows directory, and create an initial YAML file. Define a basic job to ensure the workflow file is recognized by GitHub.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Configure Linting, Build, and Test Jobs",
+            "description": "Define and set up separate jobs in the workflow for linting, building, and testing the project.",
+            "dependencies": [
+              1
+            ],
+            "details": "Add individual jobs for linting (e.g., ESLint), building the codebase (e.g., npm run build), and running tests (e.g., npm test). Ensure that each job utilizes the appropriate actions and scripts.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Set Trigger Events and Caching",
+            "description": "Configure workflow triggers and optimize performance by setting up caching for node modules.",
+            "dependencies": [
+              2
+            ],
+            "details": "Configure the workflow to run on push and pull request events. Implement caching strategies for dependency management (e.g., caching node_modules) to improve job run times.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Verify Workflow Functionality",
+            "description": "Ensure that the GitHub Actions workflow runs successfully through test cases and debugging.",
+            "dependencies": [
+              3
+            ],
+            "details": "Run tests to verify each job's functionality in the CI/CD pipeline. Analyze logs and debug issues to validate that linting, building, and testing jobs complete successfully.",
+            "status": "pending"
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-16T19:55:35.907Z",
+      "updated": "2025-06-16T21:49:37.060Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
