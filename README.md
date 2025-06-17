@@ -48,6 +48,15 @@ pnpm run typecheck
 pnpm run build
 ```
 
+### Deploy to Production
+
+Build and deploy to Firebase Hosting:
+
+```bash
+pnpm run build
+firebase deploy --only hosting
+```
+
 ### Test
 
 ```bash

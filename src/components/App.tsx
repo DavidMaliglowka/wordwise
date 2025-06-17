@@ -4,6 +4,7 @@ import { AuthPage } from '../pages/AuthPage';
 import { FirestoreTest } from './test/FirestoreTest';
 import { StorageTest } from './test/StorageTest';
 import { SecurityTest } from './test/SecurityTest';
+import { DocumentTest } from './test/DocumentTest';
 import Avatar from 'components/Avatar'
 import logo from 'assets/logo.svg'
 
@@ -52,6 +53,7 @@ const Dashboard: React.FC = () => {
             <SecurityTest />
             <FirestoreTest />
             <StorageTest />
+            <DocumentTest />
           </div>
 
           <div
