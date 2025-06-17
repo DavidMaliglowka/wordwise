@@ -445,7 +445,7 @@ export class GrammarService {
     return !!auth.currentUser;
   }
 
-    /**
+  /**
    * Applies a suggestion to text with intelligent position handling
    * Handles position drift and preserves surrounding punctuation
    */
@@ -455,47 +455,58 @@ export class GrammarService {
     appliedSuggestions: GrammarSuggestion[] = []
   ): { newText: string; positionDelta: number } {
 
-    // CRITICAL FIX: For the FIRST application, use original positions
-    // For subsequent applications, we need to find the text by content, not position
+    // ENHANCED FIX: Multiple fallback strategies for finding the correct text
     let finalStart = suggestion.range.start;
     let finalEnd = suggestion.range.end;
     let textToReplace = text.substring(finalStart, finalEnd);
 
-    // If the text at the expected position doesn't match what we expect to replace,
-    // search for the correct position
-    if (textToReplace !== suggestion.original) {
-
-      // Search for the exact text we want to replace
-      const searchIndex = text.indexOf(suggestion.original);
-      if (searchIndex !== -1) {
-        finalStart = searchIndex;
-        finalEnd = searchIndex + suggestion.original.length;
-        textToReplace = text.substring(finalStart, finalEnd);
-      } else {
-        // If we can't find the exact text, try a fuzzy search around the expected position
-        const searchRange = 20;
-        const searchStart = Math.max(0, suggestion.range.start - searchRange);
-        const searchEnd = Math.min(text.length, suggestion.range.end + searchRange);
-        const searchText = text.substring(searchStart, searchEnd);
-
-        const fuzzyIndex = searchText.indexOf(suggestion.original);
-        if (fuzzyIndex !== -1) {
-          finalStart = searchStart + fuzzyIndex;
-          finalEnd = finalStart + suggestion.original.length;
-          textToReplace = text.substring(finalStart, finalEnd);
-        } else {
-          // Fall back to original positions
-          finalStart = suggestion.range.start;
-          finalEnd = suggestion.range.end;
-          textToReplace = text.substring(finalStart, finalEnd);
-        }
+    // Strategy 1: Try original positions first
+    if (textToReplace === suggestion.original) {
+      // Perfect match with original positions
+      // Use the original positions
+    } else {
+      // Strategy 2: Search for ALL instances and choose the best one
+      const instances = [];
+      let searchStart = 0;
+      while (true) {
+        const index = text.indexOf(suggestion.original, searchStart);
+        if (index === -1) break;
+        instances.push({
+          start: index,
+          end: index + suggestion.original.length,
+          distance: Math.abs(index - suggestion.range.start)
+        });
+        searchStart = index + 1;
       }
+
+      if (instances.length === 0) {
+        throw new Error(`Cannot find text "${suggestion.original}" anywhere in the document`);
+      }
+
+      if (instances.length === 1) {
+        // Only one instance found, use it
+        finalStart = instances[0].start;
+        finalEnd = instances[0].end;
+      } else {
+        // Multiple instances found, choose the closest to the original position
+        const bestInstance = instances.reduce((closest, current) =>
+          current.distance < closest.distance ? current : closest
+        );
+
+        finalStart = bestInstance.start;
+        finalEnd = bestInstance.end;
+      }
+
+      textToReplace = text.substring(finalStart, finalEnd);
     }
 
-    // Validate final positions
+    // Final validation
     if (finalStart < 0 || finalEnd > text.length || finalStart > finalEnd) {
-      const error = `Invalid final position: start=${finalStart}, end=${finalEnd}, textLength=${text.length}`;
-      throw new Error(error);
+      throw new Error(`Invalid final position: start=${finalStart}, end=${finalEnd}, textLength=${text.length}`);
+    }
+
+    if (textToReplace !== suggestion.original) {
+      throw new Error(`Final text mismatch: expected "${suggestion.original}", got "${textToReplace}"`);
     }
 
     // Apply the replacement

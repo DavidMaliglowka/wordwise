@@ -69,8 +69,14 @@ const grammarCheckerTool = {
               range: {
                 type: 'object',
                 properties: {
-                  start: { type: 'number', description: 'Start character position (0-indexed)' },
-                  end: { type: 'number', description: 'End character position (0-indexed)' }
+                  start: {
+                    type: 'number',
+                    description: 'Start character position (0-indexed). MUST be exact - verify with text.substring(start, end)'
+                  },
+                  end: {
+                    type: 'number',
+                    description: 'End character position (0-indexed). MUST be exact - verify with text.substring(start, end)'
+                  }
                 },
                 required: ['start', 'end']
               },
@@ -81,7 +87,7 @@ const grammarCheckerTool = {
               },
               original: {
                 type: 'string',
-                description: 'Exact text to replace (must match text at range positions)'
+                description: 'Exact text to replace (MUST match text.substring(start, end) exactly - count characters carefully)'
               },
               proposed: {
                 type: 'string',
@@ -127,10 +133,23 @@ function createSystemPrompt(
 3. SPELLING: Only flag actual misspellings
 4. PUNCTUATION: Be consistent, avoid contradictory suggestions
 
-CRITICAL RULES:
-- CONSISTENCY: Don't suggest adding then removing the same punctuation
-- ACCURACY: Ensure explanations match the actual change being made
-- PRECISION: Use exact character positions and matching text
+CRITICAL RULES FOR CHARACTER POSITIONS:
+- Count characters from position 0 (zero-indexed)
+- Include ALL characters: letters, spaces, punctuation, newlines
+- The "original" text MUST exactly match text.substring(start, end)
+- Double-check your position calculations before submitting
+- When suggesting capitalization changes, ensure you target the EXACT character
+
+POSITION CALCULATION EXAMPLE:
+Text: "Hello world. She dont like it."
+- "dont" starts at position 14, ends at position 18
+- The "S" in "She" is at position 13
+- The space after "." is at position 12
+
+CONSISTENCY RULES:
+- Don't suggest adding then removing the same punctuation
+- Ensure explanations match the actual change being made
+- Use exact character positions and matching text
 
 Common patterns:
 - "She dont" → "She doesn't" (3rd person singular)
@@ -148,13 +167,18 @@ function createUserPrompt(text: string): string {
 
 "${text}"
 
+CRITICAL: For each suggestion, ensure the character positions are accurate:
+1. Count from position 0
+2. Verify that text.substring(start, end) equals your "original" value
+3. Be extremely precise with position calculations
+
 Return precise suggestions with exact character positions.`;
 }
 
 /**
  * Parse and validate OpenAI tool response
  */
-function parseToolResponse(toolCallArguments: string): GrammarSuggestion[] {
+function parseToolResponse(toolCallArguments: string, originalText: string): GrammarSuggestion[] {
   try {
     const parsed = JSON.parse(toolCallArguments);
     const result = toolResponseSchema.safeParse(parsed);
@@ -167,12 +191,73 @@ function parseToolResponse(toolCallArguments: string): GrammarSuggestion[] {
       return [];
     }
 
-    // Additional validation: ensure range.end > range.start
-    const validSuggestions = result.data.suggestions.filter(suggestion => {
-      if (suggestion.range.end <= suggestion.range.start) {
-        logger.warn('Invalid range in suggestion:', suggestion);
+    // Enhanced validation with position verification
+    const validSuggestions = result.data.suggestions.filter((suggestion, index) => {
+      // Basic range validation
+      if (suggestion.range.end <= suggestion.range.start || suggestion.range.start < 0) {
+        logger.warn(`Invalid range in suggestion ${index}:`, suggestion);
         return false;
       }
+
+      // Check if positions are within text bounds
+      if (suggestion.range.end > originalText.length) {
+        logger.warn(`Position out of bounds in suggestion ${index}:`, {
+          suggestion,
+          textLength: originalText.length
+        });
+        return false;
+      }
+
+      // CRITICAL: Verify that the original text matches the position
+      const actualText = originalText.substring(suggestion.range.start, suggestion.range.end);
+      if (actualText !== suggestion.original) {
+        logger.warn(`Position mismatch in suggestion ${index}:`, {
+          expected: suggestion.original,
+          actual: actualText,
+          start: suggestion.range.start,
+          end: suggestion.range.end,
+          context: originalText.substring(
+            Math.max(0, suggestion.range.start - 10),
+            Math.min(originalText.length, suggestion.range.end + 10)
+          )
+        });
+
+        // ENHANCED FIX: Find ALL instances and choose the closest to original position
+        const instances = [];
+        let searchStart = 0;
+        while (true) {
+          const index = originalText.indexOf(suggestion.original, searchStart);
+          if (index === -1) break;
+          instances.push({
+            start: index,
+            end: index + suggestion.original.length,
+            distance: Math.abs(index - suggestion.range.start)
+          });
+          searchStart = index + 1;
+        }
+
+        if (instances.length === 0) {
+          logger.warn(`Could not find original text "${suggestion.original}" anywhere in the document`);
+          return false;
+        }
+
+        // Choose the instance closest to the original position
+        const bestInstance = instances.reduce((closest, current) =>
+          current.distance < closest.distance ? current : closest
+        );
+
+        logger.info(`Auto-correcting position for suggestion ${index}:`, {
+          oldStart: suggestion.range.start,
+          newStart: bestInstance.start,
+          text: suggestion.original
+        });
+
+        // Update the suggestion with correct positions
+        suggestion.range.start = bestInstance.start;
+        suggestion.range.end = bestInstance.end;
+        return true;
+      }
+
       return true;
     });
 
@@ -283,7 +368,7 @@ export async function checkGrammarWithOpenAI(
       return [];
     }
 
-    const suggestions = parseToolResponse(toolCall.function.arguments);
+    const suggestions = parseToolResponse(toolCall.function.arguments, text);
 
     logger.info('OpenAI API call successful', {
       usage: completion.usage,
@@ -361,7 +446,7 @@ export async function checkGrammarWithOpenAIStreaming(
       }
     }
 
-    const suggestions = parseToolResponse(argumentsBuffer);
+    const suggestions = parseToolResponse(argumentsBuffer, text);
 
     logger.info('OpenAI streaming API call completed', {
       responseLength: argumentsBuffer.length,
