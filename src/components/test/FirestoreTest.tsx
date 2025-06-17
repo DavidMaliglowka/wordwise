@@ -104,8 +104,8 @@ export const FirestoreTest: React.FC = () => {
       // Test 3: Get user documents
       addTestResult('📋 Fetching user documents...');
       const userDocs = await FirestoreService.Document.getUserDocuments(user.uid);
-      setDocuments(userDocs);
-      addTestResult(`✅ Retrieved ${userDocs.length} documents`);
+      setDocuments(userDocs.documents);
+      addTestResult(`✅ Retrieved ${userDocs.documents.length} documents`);
 
       // Test 4: Get user brand profiles
       addTestResult('🎨 Fetching user brand profiles...');
