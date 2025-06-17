@@ -11,9 +11,13 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData,
   Timestamp,
   WriteBatch,
-  writeBatch
+  writeBatch,
+  increment
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import {
@@ -139,6 +143,7 @@ export class DocumentService {
     const now = Timestamp.now();
     const docRef = await addDoc(collection(db, COLLECTIONS.DOCUMENTS), {
       ...document,
+      editCount: 0,
       createdAt: now,
       updatedAt: now,
       lastAccessedAt: now
@@ -159,28 +164,65 @@ export class DocumentService {
     return null;
   }
 
-  static async getUserDocuments(uid: string, limitCount: number = 50): Promise<Document[]> {
-    const q = query(
+  static async getUserDocuments(
+    uid: string,
+    limitCount: number = 20,
+    lastDoc?: QueryDocumentSnapshot<DocumentData>
+  ): Promise<{ documents: Document[], lastDoc?: QueryDocumentSnapshot<DocumentData>, hasMore: boolean }> {
+    let q = query(
       collection(db, COLLECTIONS.DOCUMENTS),
       where('uid', '==', uid),
       orderBy('updatedAt', 'desc'),
       limit(limitCount)
     );
 
+    // Add cursor for pagination
+    if (lastDoc) {
+      q = query(
+        collection(db, COLLECTIONS.DOCUMENTS),
+        where('uid', '==', uid),
+        orderBy('updatedAt', 'desc'),
+        startAfter(lastDoc),
+        limit(limitCount)
+      );
+    }
+
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const documents = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as Document));
+
+    const lastDocument = querySnapshot.docs[querySnapshot.docs.length - 1];
+    const hasMore = querySnapshot.docs.length === limitCount;
+
+    return {
+      documents,
+      lastDoc: lastDocument,
+      hasMore
+    };
   }
 
   static async updateDocument(id: string, updates: Partial<Document>): Promise<void> {
     const docRef = doc(db, COLLECTIONS.DOCUMENTS, id);
-    await updateDoc(docRef, {
+
+    // Check if this update should increment edit count
+    // Increment for content, title, or status changes (not for metadata like lastAccessedAt)
+    const shouldIncrementEditCount = updates.content !== undefined ||
+                                   updates.title !== undefined ||
+                                   updates.status !== undefined ||
+                                   updates.goals !== undefined ||
+                                   updates.contentType !== undefined ||
+                                   updates.brandProfileId !== undefined;
+
+    const updatePayload = {
       ...updates,
       updatedAt: Timestamp.now(),
-      lastAccessedAt: Timestamp.now()
-    });
+      lastAccessedAt: Timestamp.now(),
+      ...(shouldIncrementEditCount && { editCount: increment(1) })
+    };
+
+    await updateDoc(docRef, updatePayload);
   }
 
   static async updateDocumentGoals(id: string, goals: DocumentGoals): Promise<void> {
@@ -320,3 +362,4 @@ export const FirestoreService = {
   Suggestion: SuggestionService,
   MetricSnapshot: MetricSnapshotService
 };
+

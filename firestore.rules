@@ -47,8 +47,8 @@ service cloud.firestore {
       allow create: if isAuthenticated()
                    && isOwner(request.resource.data.uid)
                    && request.resource.data.keys().hasAll(['uid', 'title', 'content', 'contentType', 'status'])
-                   && request.resource.data.contentType in ['email', 'social', 'general']
-                   && request.resource.data.status in ['draft', 'published', 'archived'];
+                   && request.resource.data.contentType in ['blog', 'email', 'social', 'ad_copy', 'other']
+                   && request.resource.data.status in ['draft', 'writing', 'reviewing', 'published'];
 
       allow update: if isAuthenticated()
                    && isOwner(resource.data.uid)

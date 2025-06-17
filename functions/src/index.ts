@@ -39,6 +39,7 @@ const updateDocumentSchema = z.object({
   brandProfileId: z.string().optional(),
   goals: z.array(z.string()).optional(),
   status: z.enum(['draft', 'writing', 'reviewing', 'published']).optional(),
+  editCount: z.number().min(0).optional(),
 });
 
 /**
@@ -141,6 +142,7 @@ export const createDocument = onRequest({
       brandProfileId: documentData.brandProfileId || null,
       status: "draft" as const,
       goals: documentData.goals || [],
+      editCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -286,11 +288,25 @@ export const updateDocument = onRequest({
       return sendError(res, 403, "Access denied", null, req);
     }
 
-    // Update document with new timestamp
-    const updatePayload = {
+    // Check if this update should increment edit count
+    // Increment for content, title, or status changes (not for metadata like lastAccessedAt)
+    const shouldIncrementEditCount = updateData.content !== undefined ||
+                                   updateData.title !== undefined ||
+                                   updateData.status !== undefined ||
+                                   updateData.goals !== undefined ||
+                                   updateData.contentType !== undefined ||
+                                   updateData.brandProfileId !== undefined;
+
+    // Update document with new timestamp and possibly increment edit count
+    const updatePayload: any = {
       ...updateData,
       updatedAt: admin.firestore.Timestamp.now(),
     };
+
+    // Use Firestore increment for atomic operation
+    if (shouldIncrementEditCount) {
+      updatePayload.editCount = admin.firestore.FieldValue.increment(1);
+    }
 
     await docRef.update(updatePayload);
 

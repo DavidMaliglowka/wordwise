@@ -20,6 +20,13 @@ export function timestampToDate(timestamp: FirestoreTimestamp): Date {
   return new Date();
 }
 
+// Edit History Tracking
+export interface EditEntry {
+  timestamp: FirestoreTimestamp;
+  type: 'content' | 'title' | 'status' | 'metadata';
+  userId: string;
+}
+
 // User Collection
 export interface User {
   uid: string;
@@ -80,8 +87,11 @@ export interface Document {
   brandProfileId?: string; // Optional brand profile to use
   status: 'draft' | 'writing' | 'reviewing' | 'published';
   goals?: string[]; // Array of goal strings
+  editCount?: number; // Number of edits made to this document
+  editHistory?: EditEntry[]; // Detailed edit history (optional)
   createdAt: FirestoreTimestamp;
   updatedAt: FirestoreTimestamp;
+  lastAccessedAt: FirestoreTimestamp;
 }
 
 // Document creation types
@@ -100,6 +110,7 @@ export interface UpdateDocumentData {
   brandProfileId?: string;
   goals?: string[];
   status?: 'draft' | 'writing' | 'reviewing' | 'published';
+  editCount?: number; // Allow updating edit count
 }
 
 // Legacy interface for backward compatibility

@@ -1,9 +1,14 @@
 /** @type {import('tailwindcss').Config} */
 
 export default {
-  content: ['./src/**/*.{mjs,js,ts,jsx,tsx}'],
+  content: ['./src/**/*.{js,jsx,ts,tsx}', './index.html'],
   theme: {
-    extend: {}
+    extend: {
+      screens: {
+        'xs': '475px',
+        '3xl': '1792px',
+      },
+    }
   },
   plugins: []
 }
