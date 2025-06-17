@@ -43,7 +43,7 @@ const defaultUserSettings: UserSettings = {
   language: 'en',
   autoSave: true,
   showMetrics: true,
-  defaultContentType: 'general',
+  defaultContentType: 'other',
   notifications: {
     email: true,
     inApp: true

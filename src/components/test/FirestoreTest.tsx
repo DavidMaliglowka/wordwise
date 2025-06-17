@@ -30,7 +30,7 @@ export const FirestoreTest: React.FC = () => {
         uid: user.uid,
         title: 'Simple Test Document',
         content: 'Testing basic Firestore operations without composite indexes.',
-        contentType: 'general',
+        contentType: 'other',
         status: 'draft'
       });
       addTestResult(`✅ Document created with ID: ${docId}`);
@@ -80,7 +80,7 @@ export const FirestoreTest: React.FC = () => {
         uid: user.uid,
         title: 'Test Document',
         content: 'This is a test document to verify Firestore is working correctly.',
-        contentType: 'general',
+        contentType: 'other',
         status: 'draft'
       });
       addTestResult(`✅ Document created with ID: ${docId}`);

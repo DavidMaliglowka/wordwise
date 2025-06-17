@@ -184,7 +184,13 @@ export class DocumentService {
   }
 
   static async updateDocumentGoals(id: string, goals: DocumentGoals): Promise<void> {
-    await this.updateDocument(id, { goals });
+    // Convert legacy DocumentGoals object to string array
+    const goalsArray = [
+      `Tone: ${goals.tone}`,
+      `Audience: ${goals.audience}`,
+      `Intent: ${goals.intent}`
+    ];
+    await this.updateDocument(id, { goals: goalsArray });
   }
 
   static async deleteDocument(id: string): Promise<void> {
