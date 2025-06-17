@@ -232,6 +232,18 @@ export class GrammarService {
         console.warn(`Invalid confidence in suggestion at index ${index} (using default):`, s);
       }
 
+      // Validate that the explanation matches the actual change
+      const isValidExplanation = this._validateExplanation(s.original, s.proposed, s.explanation);
+      if (!isValidExplanation) {
+        console.warn(`Explanation mismatch in suggestion at index ${index}:`, {
+          original: s.original,
+          proposed: s.proposed,
+          explanation: s.explanation
+        });
+        // Fix the explanation to match the actual change
+        s.explanation = this._generateCorrectExplanation(s.original, s.proposed, s.type);
+      }
+
       // If everything is okay, add to the validated list
       validated.push({
         type: s.type,
@@ -244,6 +256,77 @@ export class GrammarService {
     });
 
     return validated;
+  }
+
+  /**
+   * Validate that the explanation matches the actual change being made
+   */
+  private static _validateExplanation(original: string, proposed: string, explanation: string): boolean {
+    const lowerExplanation = explanation.toLowerCase();
+
+    // Check for capitalization changes
+    if (original.toLowerCase() === proposed.toLowerCase() && original !== proposed) {
+      const isCapitalizing = original[0] === original[0].toLowerCase() && proposed[0] === proposed[0].toUpperCase();
+      const isLowercasing = original[0] === original[0].toUpperCase() && proposed[0] === proposed[0].toLowerCase();
+
+      if (isCapitalizing && !lowerExplanation.includes('capital')) {
+        return false;
+      }
+      if (isLowercasing && !lowerExplanation.includes('lowercase')) {
+        return false;
+      }
+    }
+
+    // Check for punctuation changes
+    if (original.includes(',') && !proposed.includes(',')) {
+      if (!lowerExplanation.includes('remov') && !lowerExplanation.includes('delet')) {
+        return false;
+      }
+    }
+    if (!original.includes(',') && proposed.includes(',')) {
+      if (!lowerExplanation.includes('add') && !lowerExplanation.includes('insert')) {
+        return false;
+      }
+    }
+
+    return true; // Default to valid if no obvious mismatches
+  }
+
+  /**
+   * Generate a correct explanation for a change
+   */
+  private static _generateCorrectExplanation(original: string, proposed: string, type: string): string {
+    // Handle capitalization changes
+    if (original.toLowerCase() === proposed.toLowerCase() && original !== proposed) {
+      if (original[0] === original[0].toLowerCase() && proposed[0] === proposed[0].toUpperCase()) {
+        return `Capitalize the first letter of "${original}" to "${proposed}".`;
+      }
+      if (original[0] === original[0].toUpperCase() && proposed[0] === proposed[0].toLowerCase()) {
+        return `Change "${original}" to lowercase "${proposed}".`;
+      }
+    }
+
+    // Handle punctuation changes
+    if (original.includes(',') && !proposed.includes(',')) {
+      return `Remove the comma from "${original}" to improve sentence flow.`;
+    }
+    if (!original.includes(',') && proposed.includes(',')) {
+      return `Add a comma to "${original}" for proper punctuation.`;
+    }
+
+    // Default explanations by type
+    switch (type) {
+      case 'grammar':
+        return `Correct the grammar from "${original}" to "${proposed}".`;
+      case 'spelling':
+        return `Fix the spelling from "${original}" to "${proposed}".`;
+      case 'punctuation':
+        return `Correct the punctuation from "${original}" to "${proposed}".`;
+      case 'style':
+        return `Improve the style from "${original}" to "${proposed}".`;
+      default:
+        return `Change "${original}" to "${proposed}".`;
+    }
   }
 
   /**
@@ -356,7 +439,7 @@ export class GrammarService {
     return !!auth.currentUser;
   }
 
-  /**
+    /**
    * Applies a suggestion to text with intelligent position handling
    * Handles position drift and preserves surrounding punctuation
    */
@@ -365,49 +448,53 @@ export class GrammarService {
     suggestion: GrammarSuggestion,
     appliedSuggestions: GrammarSuggestion[] = []
   ): { newText: string; positionDelta: number } {
-    // 1. Try a robust word boundary search first, as AI ranges can be unreliable.
-    // This regex matches the word and captures optional trailing punctuation.
-    const wordBoundaryRegex = new RegExp(`\\b(${suggestion.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})([.,?!]?)\\b`, 'i');
-    const match = wordBoundaryRegex.exec(text);
 
-    if (match && match.index !== undefined) {
-      const matchedWord = match[1]; // The actual word "tommorow"
-      const trailingPunctuation = match[2] || ''; // The "." or empty string
+    // CRITICAL FIX: For the FIRST application, use original positions
+    // For subsequent applications, we need to find the text by content, not position
+    let finalStart = suggestion.range.start;
+    let finalEnd = suggestion.range.end;
+    let textToReplace = text.substring(finalStart, finalEnd);
 
-      // Preserve punctuation in the replacement
-      const replacementText = suggestion.proposed + trailingPunctuation;
+    // If the text at the expected position doesn't match what we expect to replace,
+    // search for the correct position
+    if (textToReplace !== suggestion.original) {
 
-      const before = text.substring(0, match.index);
-      const after = text.substring(match.index + matchedWord.length + trailingPunctuation.length);
-      const newText = before + replacementText + after;
-      const positionDelta = replacementText.length - (matchedWord.length + trailingPunctuation.length);
+      // Search for the exact text we want to replace
+      const searchIndex = text.indexOf(suggestion.original);
+      if (searchIndex !== -1) {
+        finalStart = searchIndex;
+        finalEnd = searchIndex + suggestion.original.length;
+        textToReplace = text.substring(finalStart, finalEnd);
+      } else {
+        // If we can't find the exact text, try a fuzzy search around the expected position
+        const searchRange = 20;
+        const searchStart = Math.max(0, suggestion.range.start - searchRange);
+        const searchEnd = Math.min(text.length, suggestion.range.end + searchRange);
+        const searchText = text.substring(searchStart, searchEnd);
 
-      return { newText, positionDelta };
-    }
-
-    // 2. Fallback to using the suggestion's range if the regex fails.
-    // This maintains the existing position drift logic for more complex cases.
-    const sortedApplied = appliedSuggestions.sort((a, b) => b.range.start - a.range.start);
-    let positionOffset = 0;
-    for (const applied of sortedApplied) {
-      if (applied.range.start < suggestion.range.start) {
-        const lengthDelta = applied.proposed.length - applied.original.length;
-        positionOffset += lengthDelta;
+        const fuzzyIndex = searchText.indexOf(suggestion.original);
+        if (fuzzyIndex !== -1) {
+          finalStart = searchStart + fuzzyIndex;
+          finalEnd = finalStart + suggestion.original.length;
+          textToReplace = text.substring(finalStart, finalEnd);
+        } else {
+          // Fall back to original positions
+          finalStart = suggestion.range.start;
+          finalEnd = suggestion.range.end;
+          textToReplace = text.substring(finalStart, finalEnd);
+        }
       }
     }
 
-    const adjustedStart = suggestion.range.start + positionOffset;
-    const adjustedEnd = suggestion.range.end + positionOffset;
-
-    if (adjustedStart < 0 || adjustedEnd > text.length || adjustedStart > adjustedEnd) {
-      throw new Error(`Invalid suggestion position after adjustment: start=${adjustedStart}, end=${adjustedEnd}, textLength=${text.length}`);
+    // Validate final positions
+    if (finalStart < 0 || finalEnd > text.length || finalStart > finalEnd) {
+      const error = `Invalid final position: start=${finalStart}, end=${finalEnd}, textLength=${text.length}`;
+      throw new Error(error);
     }
 
-    const textToReplace = text.substring(adjustedStart, adjustedEnd);
-
-    // Apply the replacement if it's a simple match
-    const before = text.substring(0, adjustedStart);
-    const after = text.substring(adjustedEnd);
+    // Apply the replacement
+    const before = text.substring(0, finalStart);
+    const after = text.substring(finalEnd);
     const newText = before + suggestion.proposed + after;
     const positionDelta = suggestion.proposed.length - textToReplace.length;
 
@@ -442,8 +529,49 @@ export class GrammarService {
         };
       }
 
-      // If suggestion overlaps with the change, it's likely invalid now
-      return null;
+      // If suggestion overlaps with the change, only remove it if it's significantly overlapping
+      // Allow small overlaps (like punctuation) to be preserved and shifted
+      const overlapStart = Math.max(suggestion.range.start, changeStart);
+      const overlapEnd = Math.min(suggestion.range.end, changeEnd);
+      const overlapLength = Math.max(0, overlapEnd - overlapStart);
+      const suggestionLength = suggestion.range.end - suggestion.range.start;
+
+      // If more than 50% of the suggestion overlaps with the change, remove it
+      if (overlapLength > suggestionLength * 0.5) {
+        return null;
+      }
+
+      // Otherwise, try to preserve and adjust the suggestion
+      // If the suggestion starts before the change but ends within it, truncate it
+      if (suggestion.range.start < changeStart && suggestion.range.end <= changeEnd) {
+        return {
+          ...suggestion,
+          range: {
+            start: suggestion.range.start,
+            end: changeStart
+          }
+        };
+      }
+
+      // If the suggestion starts within the change but ends after it, shift the start
+      if (suggestion.range.start >= changeStart && suggestion.range.end > changeEnd) {
+        return {
+          ...suggestion,
+          range: {
+            start: changeStart + newLength,
+            end: suggestion.range.end + lengthDelta
+          }
+        };
+      }
+
+      // Default case: shift the entire suggestion
+      return {
+        ...suggestion,
+        range: {
+          start: suggestion.range.start + lengthDelta,
+          end: suggestion.range.end + lengthDelta
+        }
+      };
     }).filter((suggestion): suggestion is GrammarSuggestion => suggestion !== null);
   }
 }

@@ -78,11 +78,12 @@ const DocumentEditor: React.FC = () => {
         // Mark as having unsaved changes
         setHasUnsavedChanges(true);
 
-        // Re-check grammar for the new text after a short delay
+        // Reset flag but DON'T automatically recheck grammar
+        // This prevents lost suggestions and conflicting loops
+        // Grammar will be rechecked naturally when user types next
         setTimeout(() => {
           isApplyingSuggestion.current = false;
-          checkGrammar(result.newText);
-        }, 100); // Short delay to ensure editor update is complete
+        }, 100);
       }
     } catch (error) {
       console.error('Error in handleApplySuggestion:', error);

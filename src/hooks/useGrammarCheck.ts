@@ -151,45 +151,33 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
       return null;
     }
 
-    try {
-      // Use the smart text replacement logic
-      const result = GrammarService.applyTextSuggestion(
-        currentText,
-        suggestion,
-        appliedSuggestionsRef.current
-      );
+          try {
+        // Use the smart text replacement logic (no need to pass applied suggestions)
+        const result = GrammarService.applyTextSuggestion(
+          currentText,
+          suggestion,
+          [] // Empty array since we're using content-based search now
+        );
 
-      // Track this applied suggestion
-      appliedSuggestionsRef.current.push(suggestion);
+        // Simply remove the applied suggestion from the list
+        // The content-based search will handle finding other suggestions correctly
+        setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
 
-      // Update positions of remaining suggestions
-      const updatedSuggestions = GrammarService.updateSuggestionsAfterChange(
-        suggestions.filter(s => s.id !== suggestionId),
-        suggestion.range.start,
-        suggestion.range.end,
-        suggestion.proposed.length
-      );
+        return {
+          newText: result.newText,
+          appliedSuggestion: suggestion
+        };
+      } catch (error: any) {
+        // If smart replacement fails, fall back to removing the suggestion and showing an error
+        setError({
+          message: `Failed to apply suggestion: ${error.message}`,
+          type: 'validation'
+        });
 
-      // Update suggestions state with position-corrected suggestions
-      const editorSuggestions = GrammarService.createEditorSuggestions(updatedSuggestions);
-      setSuggestions(editorSuggestions);
-
-      return {
-        newText: result.newText,
-        appliedSuggestion: suggestion
-      };
-    } catch (error: any) {
-      // If smart replacement fails, fall back to removing the suggestion and showing an error
-      console.error('Failed to apply suggestion:', error.message);
-      setError({
-        message: `Failed to apply suggestion: ${error.message}`,
-        type: 'validation'
-      });
-
-      // Remove the problematic suggestion
-      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      return null;
-    }
+        // Remove the problematic suggestion
+        setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        return null;
+      }
   }, [suggestions]);
 
   const retryLastCheck = useCallback(() => {
