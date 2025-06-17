@@ -195,10 +195,73 @@ const DocumentEditor: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
+        {/* Mobile Layout */}
+        <div className="sm:hidden">
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={handleBackToDashboard}
+              className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 mr-1" />
+              <span className="text-sm">Back</span>
+            </button>
+
+            <button
+              onClick={handleManualSave}
+              disabled={saving || !hasUnsavedChanges}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+
+          <input
+            type="text"
+            value={document.title}
+            onChange={(e) => setDocument(prev => prev ? { ...prev, title: e.target.value } : null)}
+            onBlur={(e) => updateTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur();
+              }
+            }}
+            className="w-full text-lg font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+            placeholder="Document title..."
+          />
+
+          <div className="flex items-center justify-between mt-2 text-xs text-gray-600">
+            <div>
+              <span>{editorState.wordCount} words</span>
+              <span className="mx-2">•</span>
+              <span>{editorState.characterCount} chars</span>
+            </div>
+
+            <div className="flex items-center">
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-1"></div>
+                  <span>Saving...</span>
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <Clock className="w-3 h-3 mr-1 text-amber-500" />
+                  <span>Unsaved</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3 h-3 mr-1 text-green-500" />
+                  <span>Saved</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Layout */}
+        <div className="hidden sm:flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
               onClick={handleBackToDashboard}
@@ -271,8 +334,8 @@ const DocumentEditor: React.FC = () => {
       </div>
 
       {/* Editor */}
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-white rounded-lg shadow-sm">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        <div>
           <LexicalEditor
             initialContent={document.content || ''}
             placeholder="Start writing your document..."
@@ -280,7 +343,7 @@ const DocumentEditor: React.FC = () => {
             onSave={handleAutoSave}
             autoSave={true}
             autoSaveDelay={2000}
-            className="min-h-[600px]"
+            className="min-h-[500px] sm:min-h-[600px]"
           />
         </div>
       </div>

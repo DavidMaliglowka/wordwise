@@ -5,6 +5,8 @@ import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
+import { ListPlugin } from '@lexical/react/LexicalListPlugin';
+import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { ListItemNode, ListNode } from '@lexical/list';
@@ -116,23 +118,23 @@ const theme = {
   // Define the theme for the editor
   ltr: 'ltr',
   rtl: 'rtl',
-  placeholder: 'text-gray-400 text-sm',
-  paragraph: 'mb-2',
-  quote: 'border-l-4 border-gray-300 pl-4 italic',
+  placeholder: 'text-gray-400 text-sm sm:text-base',
+  paragraph: 'mb-2 text-base leading-relaxed',
+  quote: 'border-l-4 border-gray-300 pl-4 italic text-base leading-relaxed',
   heading: {
-    h1: 'text-2xl font-bold mb-4',
-    h2: 'text-xl font-semibold mb-3',
-    h3: 'text-lg font-medium mb-2',
+    h1: 'text-xl sm:text-2xl font-bold mb-3 sm:mb-4 leading-tight',
+    h2: 'text-lg sm:text-xl font-semibold mb-2 sm:mb-3 leading-tight',
+    h3: 'text-base sm:text-lg font-medium mb-2 leading-tight',
   },
   list: {
     nested: {
       listitem: 'list-none',
     },
-    ol: 'list-decimal list-inside',
-    ul: 'list-disc list-inside',
+    ol: 'list-decimal list-inside text-base leading-relaxed',
+    ul: 'list-disc list-inside text-base leading-relaxed',
     listitem: 'mb-1',
   },
-  link: 'text-blue-600 underline hover:text-blue-800',
+  link: 'text-blue-600 underline hover:text-blue-800 break-words',
   text: {
     bold: 'font-bold',
     italic: 'italic',
@@ -205,32 +207,40 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   }, [onSave]);
 
   return (
-    <div className={`relative border border-gray-300 rounded-lg overflow-hidden ${className} ${readOnly ? 'bg-gray-50' : 'bg-white'}`}>
+    <div className={`relative ${className} ${readOnly ? '' : ''}`}>
       <LexicalComposer initialConfig={initialConfig}>
-        <div className="relative">
-          <RichTextPlugin
-            contentEditable={
-              <ContentEditable
-                className={`min-h-[200px] p-4 focus:outline-none resize-none ${readOnly ? 'cursor-default' : ''}`}
-                aria-placeholder={placeholder}
-                placeholder={
-                  <div className="absolute top-4 left-4 text-gray-400 text-sm pointer-events-none">
-                    {placeholder}
-                  </div>
-                }
-              />
-            }
-            ErrorBoundary={LexicalErrorBoundary}
-          />
-          <OnChangePlugin onChange={handleChange} />
-          <HistoryPlugin />
-          <InitialContentPlugin content={initialContent} />
-          <AutoSavePlugin
-            onSave={onSave}
-            delay={autoSaveDelay}
-            enabled={autoSave}
-          />
-          {!readOnly && <EditorToolbar />}
+        <div className="relative flex flex-col h-full">
+          <div className="flex-1 relative">
+            <RichTextPlugin
+              contentEditable={
+                <ContentEditable
+                  className={`min-h-[200px] p-3 sm:p-4 focus:outline-none resize-none ${!readOnly ? 'pb-16 sm:pb-20' : ''} ${readOnly ? 'cursor-default' : ''} text-base leading-relaxed`}
+                  aria-placeholder={placeholder}
+                  placeholder={
+                    <div className="absolute top-3 sm:top-4 left-3 sm:left-4 text-gray-400 text-sm pointer-events-none">
+                      {placeholder}
+                    </div>
+                  }
+                />
+              }
+              ErrorBoundary={LexicalErrorBoundary}
+            />
+            <OnChangePlugin onChange={handleChange} />
+            <HistoryPlugin />
+            <ListPlugin />
+            <LinkPlugin />
+            <InitialContentPlugin content={initialContent} />
+            <AutoSavePlugin
+              onSave={onSave}
+              delay={autoSaveDelay}
+              enabled={autoSave}
+            />
+          </div>
+          {!readOnly && (
+            <div className="fixed bottom-0 left-0 right-0 z-10">
+              <EditorToolbar />
+            </div>
+          )}
         </div>
       </LexicalComposer>
     </div>
