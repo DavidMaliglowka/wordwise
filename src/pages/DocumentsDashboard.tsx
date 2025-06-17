@@ -10,6 +10,7 @@ import {
   TrashIcon
 } from '@heroicons/react/24/outline';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import { DocumentService } from '../services/firestore';
 import { Document } from '../types/firestore';
@@ -106,6 +107,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onDownload, onDel
 
 const DocumentsDashboard: React.FC = () => {
   const { user } = useAuthContext();
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -189,8 +191,7 @@ const DocumentsDashboard: React.FC = () => {
   );
 
   const handleNewDocument = () => {
-    // TODO: Navigate to editor with new document
-    console.log('Creating new document...');
+    navigate('/editor/new');
   };
 
   const handleUploadFile = () => {
@@ -199,8 +200,7 @@ const DocumentsDashboard: React.FC = () => {
   };
 
   const handleDocumentClick = (document: Document) => {
-    // TODO: Navigate to editor with this document
-    console.log('Opening document:', document.id);
+    navigate(`/editor/${document.id}`);
   };
 
   const handleDownload = (document: Document) => {

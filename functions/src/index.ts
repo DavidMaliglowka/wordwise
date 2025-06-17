@@ -12,6 +12,9 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import { z } from "zod";
+import { checkGrammarWithOpenAI, checkGrammarWithOpenAIStreaming } from "./utils/openai";
+import { generateTextHash, getCachedResult, setCachedResult } from "./utils/cache";
+import { GrammarCheckRequest, GrammarCheckResponse } from "./types/grammar";
 
 // Configure global settings
 setGlobalOptions({
@@ -40,6 +43,15 @@ const updateDocumentSchema = z.object({
   goals: z.array(z.string()).optional(),
   status: z.enum(['draft', 'writing', 'reviewing', 'published']).optional(),
   editCount: z.number().min(0).optional(),
+});
+
+const grammarCheckSchema = z.object({
+  text: z.string().min(1).max(10000), // Max 10k characters
+  language: z.string().optional().default('en'),
+  includeSpelling: z.boolean().optional().default(true),
+  includeGrammar: z.boolean().optional().default(true),
+  includeStyle: z.boolean().optional().default(false),
+  stream: z.boolean().optional().default(false),
 });
 
 /**
@@ -432,4 +444,172 @@ export const health = onRequest({
     message: "Document API is healthy",
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * Grammar and spelling check endpoint
+ * POST /checkGrammar
+ */
+export const checkGrammar = onRequest({
+  invoker: 'public'
+}, async (req, res) => {
+  try {
+    setCorsHeaders(res, req);
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== "POST") {
+      return sendError(res, 405, "Method not allowed", null, req);
+    }
+
+    // Verify authentication
+    const uid = await verifyAuth(req);
+
+    // Validate request body
+    const validationResult = grammarCheckSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return sendError(res, 400, "Invalid request data", validationResult.error.errors, req);
+    }
+
+    const { text, language, includeSpelling, includeGrammar, includeStyle, stream } = validationResult.data;
+
+    const startTime = Date.now();
+
+    // Generate cache key based on text and options
+    const cacheKey = generateTextHash(text, {
+      language,
+      includeSpelling,
+      includeGrammar,
+      includeStyle
+    });
+
+    // Check cache first
+    const cachedResult = getCachedResult(cacheKey);
+    if (cachedResult) {
+      const response: GrammarCheckResponse = {
+        suggestions: cachedResult,
+        processedText: text,
+        cached: true,
+        processingTimeMs: Date.now() - startTime
+      };
+
+      logger.info('Grammar check served from cache', {
+        uid,
+        textLength: text.length,
+        suggestionsCount: cachedResult.length,
+        cacheKey: cacheKey.substring(0, 16) + '...'
+      });
+
+      res.status(200).json({
+        success: true,
+        data: response
+      });
+      return;
+    }
+
+    // Handle streaming response
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      let suggestions: any[] = [];
+
+      try {
+        suggestions = await checkGrammarWithOpenAIStreaming(
+          text,
+          { includeSpelling, includeGrammar, includeStyle },
+          (chunk: string) => {
+            // Send streaming chunks to client
+            res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+          }
+        );
+
+        // Cache the result
+        setCachedResult(cacheKey, suggestions);
+
+        // Send final result
+        const response: GrammarCheckResponse = {
+          suggestions,
+          processedText: text,
+          cached: false,
+          processingTimeMs: Date.now() - startTime
+        };
+
+        res.write(`data: ${JSON.stringify({ type: 'complete', data: response })}\n\n`);
+        res.end();
+
+        logger.info('Streaming grammar check completed', {
+          uid,
+          textLength: text.length,
+          suggestionsCount: suggestions.length,
+          processingTimeMs: Date.now() - startTime
+        });
+
+      } catch (error: any) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+        res.end();
+        logger.error('Streaming grammar check failed:', error);
+      }
+
+      return;
+    }
+
+    // Handle regular (non-streaming) response
+    try {
+      const suggestions = await checkGrammarWithOpenAI(text, {
+        includeSpelling,
+        includeGrammar,
+        includeStyle
+      });
+
+      // Cache the result
+      setCachedResult(cacheKey, suggestions);
+
+      const response: GrammarCheckResponse = {
+        suggestions,
+        processedText: text,
+        cached: false,
+        processingTimeMs: Date.now() - startTime
+      };
+
+      logger.info('Grammar check completed', {
+        uid,
+        textLength: text.length,
+        suggestionsCount: suggestions.length,
+        processingTimeMs: Date.now() - startTime,
+        cacheKey: cacheKey.substring(0, 16) + '...'
+      });
+
+      res.status(200).json({
+        success: true,
+        data: response
+      });
+      return;
+
+    } catch (error: any) {
+      logger.error('Grammar check failed:', error);
+
+      // Handle specific OpenAI errors
+      if (error.message.includes('authentication failed')) {
+        return sendError(res, 401, "AI service authentication failed", null, req);
+      } else if (error.message.includes('rate limit')) {
+        return sendError(res, 429, "AI service rate limit exceeded", null, req);
+      } else if (error.message.includes('API key not configured')) {
+        return sendError(res, 500, "AI service not configured", null, req);
+      }
+
+      return sendError(res, 500, "Grammar check failed", error.message, req);
+    }
+
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") {
+      return sendError(res, 401, "Unauthorized", null, req);
+    }
+    return sendError(res, 500, "Internal server error", error.message, req);
+  }
 });
