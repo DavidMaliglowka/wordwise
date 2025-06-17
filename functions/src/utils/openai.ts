@@ -46,25 +46,37 @@ function createSystemPrompt(
   if (includeSpelling) capabilities.push('spelling mistakes');
   if (includeStyle) capabilities.push('style improvements');
 
-  return `You are a professional proofreading assistant. Analyze the provided text and identify ${capabilities.join(', ')}.
+  return `You are an expert grammar and language checker. Analyze the provided text and identify ${capabilities.join(', ')}.
 
-Be strict and thorough in identifying errors. Common issues to look for:
-- Missing contractions (e.g., "dont" should be "don't")
-- Wrong word usage (e.g., "their" vs "they're" vs "there")
-- Subject-verb disagreement
-- Misspelled words
-- Missing punctuation
+CRITICAL: Always consider the full grammatical context, especially subject-verb agreement. Analyze the ENTIRE sentence before making suggestions.
+
+Key priorities in order:
+1. SUBJECT-VERB AGREEMENT: Check if verbs match their subjects (singular/plural, person)
+2. CONTEXTUAL WORD CHOICE: Ensure words fit the grammatical context (e.g., "their" vs "they're")
+3. CONTRACTIONS: Suggest appropriate contractions based on subject-verb agreement
+4. SPELLING: Only flag actual misspellings, not contextual word choice errors
+
+Common patterns to watch for:
+- "She dont" → "She doesn't" (NOT "She don't" - third person singular requires "doesn't")
+- "He dont" → "He doesn't" (NOT "He don't")
+- "They dont" → "They don't" (correct for plural)
+- "I dont" → "I don't" (correct for first person)
+- "You dont" → "You don't" (correct for second person)
+- "their going" → "they're going" (contraction of "they are")
+- "your going" → "you're going" (contraction of "you are")
+- "its vs it's" → Check if possessive or contraction is needed
+
+ALWAYS verify subject-verb agreement BEFORE suggesting contractions. The subject determines the correct verb form.
 
 For each issue found, provide a JSON object with:
-- "range": {"start": number, "end": number} (character positions)
+- "range": {"start": number, "end": number} (exact character positions)
 - "type": "grammar" | "spelling" | "punctuation" | "style"
-- "original": "original text"
-- "proposed": "suggested correction"
-- "explanation": "brief explanation of the issue"
-- "confidence": number between 0 and 1
+- "original": "exact text to replace"
+- "proposed": "grammatically correct replacement"
+- "explanation": "clear explanation focusing on the grammatical rule"
+- "confidence": number between 0.8 and 1.0 (be confident in grammar rules)
 
-Return a JSON object with a "suggestions" key containing an array of suggestion objects.
-Format: {"suggestions": [array of suggestion objects]}
+Return only: {"suggestions": [array of suggestion objects]}
 If no issues are found, return: {"suggestions": []}`;
 }
 
@@ -74,7 +86,11 @@ If no issues are found, return: {"suggestions": []}`;
  * @returns User prompt string
  */
 function createUserPrompt(text: string): string {
-  return `Please analyze this text for errors:\n\n"${text}"`;
+  return `Analyze this text for grammar and language errors. Pay special attention to subject-verb agreement and ensure all suggestions are contextually appropriate:
+
+"${text}"
+
+Remember: Consider the full grammatical context of each sentence before making suggestions.`;
 }
 
 /**

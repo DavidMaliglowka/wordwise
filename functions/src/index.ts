@@ -81,16 +81,28 @@ async function verifyAuth(req: any): Promise<string> {
 function setCorsHeaders(res: any, req?: any) {
   // Define allowed origins for different environments
   const allowedOrigins = [
-    'http://localhost:5173',           // Local development
+    'http://localhost:5173',           // Local development (default port)
+    'http://localhost:5174',           // Local development (alternate ports)
+    'http://localhost:5175',
+    'http://localhost:5176',
+    'http://localhost:5177',
+    'http://localhost:5178',
+    'http://localhost:5179',
     'https://wordwise-4234.web.app',  // Firebase Hosting
     'https://wordwise-4234.firebaseapp.com'  // Firebase Hosting alternative
   ];
 
   const origin = req?.headers?.origin;
 
-  // Set origin if it's in the allowed list, otherwise use localhost for development
-  if (origin && allowedOrigins.includes(origin)) {
-    res.set('Access-Control-Allow-Origin', origin);
+  // Check if origin is in allowed list or matches localhost pattern for development
+  if (origin) {
+    const isLocalhost = /^http:\/\/localhost:\d+$/.test(origin);
+    if (allowedOrigins.includes(origin) || isLocalhost) {
+      res.set('Access-Control-Allow-Origin', origin);
+    } else {
+      // For non-allowed origins, don't set CORS header (will cause CORS error)
+      res.set('Access-Control-Allow-Origin', 'http://localhost:5173');
+    }
   } else {
     // Default to localhost for development when no origin header is present
     res.set('Access-Control-Allow-Origin', 'http://localhost:5173');

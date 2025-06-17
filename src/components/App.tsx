@@ -4,6 +4,7 @@ import { AuthProvider, useAuthContext } from '../contexts/AuthContext';
 import { AuthPage } from '../pages/AuthPage';
 import DocumentsDashboard from '../pages/DocumentsDashboard';
 import DocumentEditor from '../pages/DocumentEditor';
+import GrammarTestPage from '../pages/GrammarTestPage';
 
 // Protected route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -67,6 +68,14 @@ const AppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <DocumentEditor />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/test/grammar"
+          element={
+            <ProtectedRoute>
+              <GrammarTestPage />
             </ProtectedRoute>
           }
         />
