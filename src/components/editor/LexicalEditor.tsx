@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -21,6 +21,10 @@ export interface EditorStateData {
   wordCount: number;
   characterCount: number;
   isEmpty: boolean;
+}
+
+export interface LexicalEditorRef {
+  updateContent: (content: string) => void;
 }
 
 interface LexicalEditorProps {
@@ -56,6 +60,42 @@ function InitialContentPlugin({ content }: { content: string }) {
       });
     }
   }, [content, editor]);
+
+  return null;
+}
+
+// Hook for programmatic content updates
+function UpdateContentPlugin({
+  updateTrigger,
+  onUpdate
+}: {
+  updateTrigger: { content: string; timestamp: number } | null;
+  onUpdate?: () => void;
+}) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    if (updateTrigger) {
+      // Use discrete update to prevent triggering onChange
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+
+        if (updateTrigger.content.trim()) {
+          // Simple text content update
+          const paragraph = $createParagraphNode();
+          const text = $createTextNode(updateTrigger.content);
+          paragraph.append(text);
+          root.append(paragraph);
+        }
+      }, { discrete: true }); // This prevents triggering update listeners
+
+      // Call the callback after update
+      if (onUpdate) {
+        setTimeout(onUpdate, 0);
+      }
+    }
+  }, [updateTrigger, editor, onUpdate]);
 
   return null;
 }
@@ -144,7 +184,7 @@ const theme = {
   },
 };
 
-const LexicalEditor: React.FC<LexicalEditorProps> = ({
+const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   initialContent = '',
   placeholder = 'Type or paste (⌘+V)…',
   onChange,
@@ -153,7 +193,9 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   autoSave = false,
   autoSaveDelay = 2000,
   readOnly = false,
-}) => {
+}, ref) => {
+  const [updateTrigger, setUpdateTrigger] = React.useState<{ content: string; timestamp: number } | null>(null);
+
   const initialConfig = {
     namespace: 'WordWiseEditor',
     theme,
@@ -206,6 +248,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onSave]);
 
+  useImperativeHandle(ref, () => ({
+    updateContent: (content: string) => {
+      setUpdateTrigger({ content, timestamp: Date.now() });
+    },
+  }));
+
   return (
     <div className={`relative ${className} ${readOnly ? '' : ''}`}>
       <LexicalComposer initialConfig={initialConfig}>
@@ -235,6 +283,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
               delay={autoSaveDelay}
               enabled={autoSave}
             />
+            <UpdateContentPlugin
+              updateTrigger={updateTrigger}
+              onUpdate={() => {
+                setUpdateTrigger(null);
+              }}
+            />
           </div>
           {!readOnly && (
             <div className="fixed bottom-0 left-0 right-0 z-10">
@@ -245,6 +299,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
       </LexicalComposer>
     </div>
   );
-};
+  });
 
 export default LexicalEditor;

@@ -7,13 +7,18 @@ export interface GrammarRange {
 
 export type GrammarSuggestionType = 'grammar' | 'spelling' | 'punctuation' | 'style';
 
+// Grammarly-style categories for UI organization
+export type GrammarCategory = 'correctness' | 'clarity' | 'engagement' | 'delivery';
+
 export interface GrammarSuggestion {
   range: GrammarRange;
   type: GrammarSuggestionType;
+  category?: GrammarCategory; // Optional for backward compatibility
   original: string;
   proposed: string;
   explanation: string;
   confidence: number; // 0 to 1
+  severity?: 'low' | 'medium' | 'high'; // Optional severity indicator
 }
 
 export interface GrammarCheckRequest {
@@ -43,6 +48,15 @@ export interface EditorSuggestion extends GrammarSuggestion {
   isVisible: boolean; // Whether highlight is currently shown
   isHovered: boolean; // Whether hover card is active
   isDismissed: boolean; // Whether user dismissed this suggestion
+  category: GrammarCategory; // Required for UI - will be auto-assigned if not provided
+}
+
+// Categorized suggestions for UI display
+export interface CategorizedSuggestions {
+  correctness: EditorSuggestion[];
+  clarity: EditorSuggestion[];
+  engagement: EditorSuggestion[];
+  delivery: EditorSuggestion[];
 }
 
 export interface GrammarCheckOptions {

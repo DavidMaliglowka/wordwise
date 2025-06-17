@@ -1,15 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { LexicalEditor, EditorStateData } from '../components/editor';
+import { LexicalEditor, EditorStateData, LexicalEditorRef } from '../components/editor';
+import GrammarSidebar from '../components/editor/GrammarSidebar';
 import { FirestoreService } from '../services/firestore';
 import { useAuthContext } from '../contexts/AuthContext';
+import { useGrammarCheck } from '../hooks/useGrammarCheck';
 import { Document } from '../types/firestore';
+import { EditorSuggestion, CategorizedSuggestions } from '../types/grammar';
+import { GrammarService } from '../services/grammar';
 import { ArrowLeft, Save, Clock } from 'lucide-react';
 
 const DocumentEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthContext();
+  const editorRef = useRef<LexicalEditorRef>(null);
+  const isApplyingSuggestion = useRef(false);
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -22,6 +28,78 @@ const DocumentEditor: React.FC = () => {
     characterCount: 0,
     isEmpty: true,
   });
+
+  // Grammar checking integration
+  const {
+    suggestions,
+    isLoading: isGrammarLoading,
+    error: grammarError,
+    checkText: checkGrammar,
+    clearSuggestions,
+    dismissSuggestion,
+    applySuggestion,
+    retryLastCheck
+  } = useGrammarCheck({
+    delay: 1000,
+    minLength: 3,
+    includeSpelling: true,
+    includeGrammar: true,
+    includeStyle: false,
+    enableCache: true
+  });
+
+  // Categorize suggestions for UI display
+  const categorizedSuggestions: CategorizedSuggestions = React.useMemo(() => {
+    return GrammarService.categorizeSuggestions(suggestions);
+  }, [suggestions]);
+
+    // Handle applying a suggestion
+  const handleApplySuggestion = useCallback((suggestion: EditorSuggestion) => {
+    try {
+      const result = applySuggestion(suggestion.id, editorState.content);
+
+      if (result && editorRef.current) {
+        // Set flag to prevent grammar checking during programmatic update
+        isApplyingSuggestion.current = true;
+
+        // Update the actual Lexical editor content
+        editorRef.current.updateContent(result.newText);
+
+        // Update the editor state
+        setEditorState(prev => ({
+          ...prev,
+          content: result.newText,
+          html: result.newText,
+          wordCount: result.newText.trim().split(/\s+/).filter(Boolean).length,
+          characterCount: result.newText.length,
+          isEmpty: result.newText.trim().length === 0,
+        }));
+
+        // Mark as having unsaved changes
+        setHasUnsavedChanges(true);
+
+        // Re-check grammar for the new text after a short delay
+        setTimeout(() => {
+          isApplyingSuggestion.current = false;
+          checkGrammar(result.newText);
+        }, 100); // Short delay to ensure editor update is complete
+      }
+    } catch (error) {
+      console.error('Error in handleApplySuggestion:', error);
+      // Reset flag in case of error
+      isApplyingSuggestion.current = false;
+    }
+  }, [applySuggestion, editorState.content, checkGrammar]);
+
+  // Handle dismissing a suggestion
+  const handleDismissSuggestion = useCallback((suggestionId: string) => {
+    dismissSuggestion(suggestionId);
+  }, [dismissSuggestion]);
+
+  // Handle clearing all suggestions
+  const handleClearAllSuggestions = useCallback(() => {
+    clearSuggestions();
+  }, [clearSuggestions]);
 
   // Load document on mount
   useEffect(() => {
@@ -72,11 +150,24 @@ const DocumentEditor: React.FC = () => {
     loadDocument();
   }, [id, user, navigate]);
 
-  // Handle editor content changes
+    // Handle editor content changes
   const handleEditorChange = useCallback((stateData: EditorStateData) => {
     setEditorState(stateData);
     setHasUnsavedChanges(true);
-  }, []);
+
+    // Skip grammar checking if we're currently applying a suggestion to prevent infinite loops
+    if (isApplyingSuggestion.current) {
+      return;
+    }
+
+    // Trigger grammar checking on content change
+    if (stateData.content && stateData.content.trim().length > 0) {
+      checkGrammar(stateData.content);
+    } else {
+      // Clear suggestions if content is empty
+      clearSuggestions();
+    }
+  }, [checkGrammar, clearSuggestions]);
 
   // Save document
   const saveDocument = useCallback(async (stateData?: EditorStateData) => {
@@ -195,9 +286,9 @@ const DocumentEditor: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex-shrink-0">
         {/* Mobile Layout */}
         <div className="sm:hidden">
           <div className="flex items-center justify-between mb-3">
@@ -294,6 +385,26 @@ const DocumentEditor: React.FC = () => {
               <span>{editorState.wordCount} words</span>
               <span className="mx-2">•</span>
               <span>{editorState.characterCount} characters</span>
+                            {/* Grammar checking status */}
+              <span className="mx-2">•</span>
+              <span className={`${isGrammarLoading ? 'text-blue-600' : suggestions.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                {isGrammarLoading ? 'Checking grammar...' :
+                 suggestions.length > 0 ? (
+                   <span className="inline-flex items-center gap-1">
+                     <span>{suggestions.length} suggestions</span>
+                     {categorizedSuggestions.correctness.length > 0 && (
+                       <span className="text-xs bg-red-100 text-red-700 px-1 rounded">
+                         {categorizedSuggestions.correctness.length} errors
+                       </span>
+                     )}
+                     {categorizedSuggestions.clarity.length > 0 && (
+                       <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">
+                         {categorizedSuggestions.clarity.length} clarity
+                       </span>
+                     )}
+                   </span>
+                 ) : 'Grammar ok'}
+              </span>
             </div>
 
             {/* Save status */}
@@ -333,19 +444,64 @@ const DocumentEditor: React.FC = () => {
         </div>
       </div>
 
-      {/* Editor */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        <div>
-          <LexicalEditor
-            initialContent={document.content || ''}
-            placeholder="Start writing your document..."
-            onChange={handleEditorChange}
-            onSave={handleAutoSave}
-            autoSave={true}
-            autoSaveDelay={2000}
-            className="min-h-[500px] sm:min-h-[600px]"
-          />
+      {/* Grammar Error Display */}
+      {grammarError && (
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2 flex-shrink-0">
+          <div className="bg-red-50 border border-red-200 rounded-md p-3">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <span className="text-red-400">⚠️</span>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Grammar Check Error</h3>
+                <div className="mt-1 text-sm text-red-700">
+                  {grammarError.message}
+                  {grammarError.type === 'auth' && (
+                    <span className="block mt-1">Please ensure you're signed in to use grammar checking.</span>
+                  )}
+                </div>
+                <div className="mt-2">
+                  <button
+                    onClick={retryLastCheck}
+                    className="text-sm bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* Main Content Area with Editor and Sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Editor Section */}
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+            <div>
+              <LexicalEditor
+                ref={editorRef}
+                initialContent={document.content || ''}
+                placeholder="Start writing your document..."
+                onChange={handleEditorChange}
+                onSave={handleAutoSave}
+                autoSave={true}
+                autoSaveDelay={2000}
+                className="min-h-[500px] sm:min-h-[600px]"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Grammar Sidebar */}
+        <GrammarSidebar
+          categorizedSuggestions={categorizedSuggestions}
+          isLoading={isGrammarLoading}
+          onApplySuggestion={handleApplySuggestion}
+          onDismissSuggestion={handleDismissSuggestion}
+          onClearAll={handleClearAllSuggestions}
+        />
       </div>
     </div>
   );

@@ -5,7 +5,9 @@ import {
   GrammarCheckApiResponse,
   GrammarCheckError,
   GrammarSuggestion,
-  EditorSuggestion
+  EditorSuggestion,
+  GrammarCategory,
+  CategorizedSuggestions
 } from '../types/grammar';
 
 // Grammar check function URL
@@ -245,6 +247,41 @@ export class GrammarService {
   }
 
   /**
+   * Automatically categorize a suggestion based on its type and content
+   */
+  private static _categorizeSuggestion(suggestion: GrammarSuggestion): GrammarCategory {
+    // If category is already provided, use it
+    if (suggestion.category) {
+      return suggestion.category;
+    }
+
+    // Auto-categorize based on type and content
+    switch (suggestion.type) {
+      case 'grammar':
+      case 'spelling':
+        return 'correctness';
+
+      case 'punctuation':
+        // Punctuation can affect clarity or correctness
+        return suggestion.confidence > 0.8 ? 'correctness' : 'clarity';
+
+      case 'style':
+        // Style suggestions usually improve clarity, engagement, or delivery
+        const explanation = suggestion.explanation.toLowerCase();
+        if (explanation.includes('tone') || explanation.includes('formal') || explanation.includes('professional')) {
+          return 'delivery';
+        } else if (explanation.includes('engage') || explanation.includes('interest') || explanation.includes('active')) {
+          return 'engagement';
+        } else {
+          return 'clarity';
+        }
+
+      default:
+        return 'clarity'; // Default fallback
+    }
+  }
+
+  /**
    * Convert grammar suggestions to editor suggestions with unique IDs
    */
   static createEditorSuggestions(suggestions: GrammarSuggestion[]): EditorSuggestion[] {
@@ -253,8 +290,27 @@ export class GrammarService {
       id: `grammar-${Date.now()}-${index}`,
       isVisible: true,
       isHovered: false,
-      isDismissed: false
+      isDismissed: false,
+      category: this._categorizeSuggestion(suggestion)
     }));
+  }
+
+  /**
+   * Group suggestions by category for UI display
+   */
+  static categorizeSuggestions(suggestions: EditorSuggestion[]): CategorizedSuggestions {
+    const categorized: CategorizedSuggestions = {
+      correctness: [],
+      clarity: [],
+      engagement: [],
+      delivery: []
+    };
+
+    suggestions.forEach(suggestion => {
+      categorized[suggestion.category].push(suggestion);
+    });
+
+    return categorized;
   }
 
   /**

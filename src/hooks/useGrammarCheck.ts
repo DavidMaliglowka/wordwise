@@ -145,9 +145,11 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
     );
   }, []);
 
-  const applySuggestion = useCallback((suggestionId: string, currentText: string) => {
+    const applySuggestion = useCallback((suggestionId: string, currentText: string) => {
     const suggestion = suggestions.find(s => s.id === suggestionId);
-    if (!suggestion) return null;
+    if (!suggestion) {
+      return null;
+    }
 
     try {
       // Use the smart text replacement logic

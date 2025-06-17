@@ -380,62 +380,93 @@
       {
         "id": 8,
         "title": "Integrate Real-time Grammar/Spell Suggestions in Editor",
-        "description": "Integrate the real-time grammar and spelling suggestions from the backend endpoint into the rich-text editor UI.",
-        "details": "In the editor component, implement logic to send editor content to the grammar/spell check endpoint (Task 7) as the user types (with debouncing). Parse the suggestions received. Implement custom marks/decorations in the editor (Lexical/Tiptap) to underline or highlight suggested ranges. Implement hover cards to display the explanation and action bar (Accept, Dismiss, Explain). Implement keyboard accessibility for cycling through and accepting suggestions.",
-        "testStrategy": "Verify suggestions appear inline as typing occurs. Test hover cards and action bar interactions (click/keyboard). Verify accepting a suggestion replaces the text correctly. Test dismissing a suggestion removes the highlight.",
-        "priority": "high",
+        "description": "Integrate the real-time grammar and spelling suggestions from the backend endpoint into the DocumentEditor (DocumentEditor.tsx). This integration should provide a comprehensive grammar suggestions experience similar to the Grammarly interface, including a right sidebar for suggestions, visual highlighting in the editor, and interactive suggestion cards with controls.",
+        "status": "pending",
         "dependencies": [
           6,
           7
         ],
-        "status": "pending",
+        "priority": "high",
+        "details": "In DocumentEditor.tsx, implement logic to send the editor content to the grammar/spell check endpoint (Task 7) as the user types (with debouncing). Parse and categorize the suggestions into Correctness, Clarity, Engagement, and Delivery. Implement a right sidebar UI to display the grouped grammar suggestions, similar to the Grammarly interface. In the main editor area, implement custom marks/decorations (using Lexical/Tiptap) to visually highlight the text ranges with suggestions. Implement interactive suggestion cards and controls, including hover cards that display explanations and action items (Accept, Dismiss, Explain) for each suggestion. Ensure full keyboard accessibility for navigating and accepting suggestions. Also, integrate the existing grammar checking service into the DocumentEditor instead of a standalone test page.",
+        "testStrategy": "Verify that as the user types, content is correctly debounced and sent to the grammar/spell check endpoint. Confirm that suggestions are received, parsed, and correctly categorized into Correctness, Clarity, Engagement, and Delivery. Test the right sidebar UI to ensure suggestions are displayed in a structured and intuitive manner. Ensure that visual highlights in the editor correspond accurately to the suggested text ranges. Validate that interactive suggestion cards and controls (hover cards, Accept, Dismiss, Explain) function correctly via both mouse and keyboard. Perform integration tests to ensure the existing grammar checking service is properly integrated into the DocumentEditor.",
         "subtasks": [
           {
             "id": 1,
-            "title": "Implement Debounce Mechanism",
-            "description": "Develop a debounce function to delay the processing of user input, reducing the frequency of API calls.",
+            "title": "Review Existing Services and Editor Structure",
+            "description": "Analyze the current implementation of GrammarService and useGrammarCheck hook, and study DocumentEditor.tsx to identify integration points.",
             "dependencies": [],
-            "details": "Ensure that the debounce timing is optimized to balance responsiveness with reduced API load.\n<info added on 2025-06-17T07:37:24.916Z>\nImplemented a debounce mechanism specifically for grammar checking. Created a new file, src/hooks/useDebounce.ts, containing two hooks: a generic useDebounce<T> for any function with proper TypeScript generics and cleanup on unmount, and a specialized useGrammarDebounce configured with a 1000ms delay. The useGrammarDebounce hook also incorporates a minimum text length threshold (default of 3 characters), smart text change detection to prevent duplicate API calls, and offers advanced controls (trigger, cancel, flush, and isActive) with automatic cleanup for memory management. This implementation optimizes responsiveness while reducing API load and is now ready to be integrated with the AI endpoint in the subsequent subtask.\n</info added on 2025-06-17T07:37:24.916Z>",
+            "details": "Examine GrammarTestPage usage and determine how the grammar functionalities can be migrated to DocumentEditor.tsx.\n<info added on 2025-06-17T17:12:33.335Z>\nAnalysis complete. The existing grammar services, hooks, and debouncing implementations have been thoroughly reviewed and confirmed to be production-ready. The plan for integrating useGrammarCheck into DocumentEditor includes importing the hook into DocumentEditor.tsx, connecting editor change events to the grammar service, and managing suggestion state in parallel with document state. Additionally, a dedicated grammar suggestion sidebar component will be created along with visual highlighting in the Lexical theme. Interactive controls such as hover cards for applying or dismissing suggestions are also planned. This integration strategy leverages the robust functionality proven in GrammarTestPage while aligning with DocumentEditor's current architecture and auto-save features.\n</info added on 2025-06-17T17:12:33.335Z>",
             "status": "done"
           },
           {
             "id": 2,
-            "title": "Integrate AI Endpoint for Real-time Suggestions",
-            "description": "Implement the integration with the AI backend to retrieve grammar and spell suggestions based on debounced input.",
+            "title": "Integrate useGrammarCheck into DocumentEditor",
+            "description": "Embed the useGrammarCheck hook within DocumentEditor.tsx to enable grammar checking functionality.",
             "dependencies": [
               1
             ],
-            "details": "Design the API request structure and error handling routines to manage potential latency and failures.\n<info added on 2025-06-17T07:39:37.160Z>\nSuccessfully integrated the AI endpoint for real-time grammar suggestions. The implementation includes comprehensive TypeScript definitions for grammar and editor suggestions, a robust grammar service with Firebase authentication, client-side caching, and detailed error handling for network, authentication, validation, and API failures. An advanced React hook now manages debounced grammar checks, prevents race conditions with unique request IDs, allows request abortion for performance, and ensures full lifecycle management (apply, dismiss, retry, and automatic cleanup). This setup streamlines secure API calls and significantly reduces API load, setting the stage for seamless integration into the Lexical editor in subtask 8.3.\n</info added on 2025-06-17T07:39:37.160Z>\n<info added on 2025-06-17T08:09:36.808Z>\nCOMPLETED: Fixed all major text replacement issues including position drift and punctuation preservation.\n\nKey improvements:\n• Enhanced smart text replacement with precise position offset calculations.\n• Integrated a fuzzy search fallback for slight positional discrepancies.\n• Employed regex-based word boundary search for more robust text matching.\n• Upgraded error handling to deliver detailed, informative error messages.\n• Improved OpenAI prompts to provide more contextually accurate grammar analyses.\n• Resolved CORS issues across multiple localhost ports.\n• Established comprehensive debugging and testing infrastructure.\n\nThe updated grammar checking system now:\n• Applies suggestions to the exact intended text positions.\n• Preserves punctuation following corrections.\n• Manages multiple suggestions seamlessly, avoiding conflicts.\n• Delivers accurate first-pass grammar suggestions (e.g., converting \"She dont\" to \"She doesn't\").\n• Includes robust error recovery coupled with clear user feedback.\n\nTesting has confirmed reliable performance across diverse text scenarios, such as the correct handling of \"tommorow\" being replaced with \"tomorrow.\"\n</info added on 2025-06-17T08:09:36.808Z>",
+            "details": "Refactor DocumentEditor.tsx to call useGrammarCheck in appropriate lifecycle events, ensuring compatibility with existing editor features.\n<info added on 2025-06-17T17:14:49.332Z>\nIntegration complete. The DocumentEditor now imports useGrammarCheck and EditorSuggestion, integrating the hook with a 1000ms debounce delay, a 3-character minimum threshold, grammar and spelling enabled (with style disabled), and caching for performance. The handleEditorChange function has been updated to trigger grammar checks on content changes and to clear suggestions when the content is empty, all while preserving the existing auto-save functionality. Additionally, a real-time grammar status display has been added to the document stats header with color-coded statuses (blue: checking, amber: suggestions, green: ok), along with an error display component featuring retry functionality and robust error handling for authentication and API failures. Grammar suggestions are now managed alongside the document state with proper cleanup and error recovery measures. Ready for the next phase: Reviewing the debouncing implementation.\n</info added on 2025-06-17T17:14:49.332Z>",
             "status": "done"
           },
           {
             "id": 3,
-            "title": "Parse and Process Suggestions",
-            "description": "Develop a module to parse responses from the AI endpoint and transform them into a format that can be used for UI components.",
+            "title": "Implement Input Debouncing",
+            "description": "Add a debounce mechanism for user input to avoid excessive calls to the grammar endpoint.",
             "dependencies": [
               2
             ],
-            "details": "Create robust parsing logic to handle different response formats and edge cases, ensuring data consistency.\n<info added on 2025-06-17T16:26:47.164Z>\nImplemented a robust parsing and validation layer in GrammarService to process suggestions from the AI endpoint. Introduced the private method _parseAndValidateSuggestions, which meticulously verifies that each suggestion meets the expected data structure and type requirements, including proper handling of the confidence score. Any malformed or incomplete suggestions are filtered out safely with warnings logged for debugging, thereby increasing the system's resilience to API variations.\n</info added on 2025-06-17T16:26:47.164Z>",
+            "details": "Use a debounce function to delay grammar checks until the user has paused typing, balancing performance and responsiveness.\n<info added on 2025-06-17T17:10:59.314Z>\nReview the existing debouncing hooks (useDebounce.ts and useGrammarDebounce) and integrate them into the DocumentEditor. The review should ensure these hooks are properly utilized, including their generic support with TypeScript, 1000ms delay in useGrammarDebounce, a minimum character threshold of 3, smart text change detection to prevent duplicate API calls, advanced controls for trigger, cancel, flush, and isActive, and automatic cleanup for memory management.\n</info added on 2025-06-17T17:10:59.314Z>\n<info added on 2025-06-17T17:16:27.845Z>\nDebouncing implementation review complete. The integration in DocumentEditor via useGrammarCheck and useGrammarDebounce has been verified with the following key points: a 1000ms delay and a minimum input length of 3 characters; smart duplicate detection that prevents redundant API calls; advanced control methods (trigger, cancel, flush, isActive) that ensure robust timeout management and memory cleanup; effective race condition mitigation using request ID tracking and AbortController; and performance optimizations including client-side caching with a 5-minute TTL. All aspects confirm that the debouncing flow is production-ready and optimally configured, allowing us to move forward to the GrammarService endpoint verification.\n</info added on 2025-06-17T17:16:27.845Z>",
             "status": "done"
           },
           {
             "id": 4,
-            "title": "Implement Custom Marks for Dynamic Highlights",
-            "description": "Integrate custom mark features into the rich-text editor to visually indicate grammar and spelling issues.",
+            "title": "Setup GrammarService Endpoint Calls",
+            "description": "Integrate calls to the GrammarService endpoint inside DocumentEditor.tsx after debouncing the input.",
             "dependencies": [
               3
             ],
-            "details": "Focus on rendering dynamic, real-time highlights that update seamlessly as suggestions change.\n<info added on 2025-06-17T16:29:55.626Z>\nImplemented the core logic for dynamic suggestion highlighting by creating a custom SuggestionNode and SuggestionPlugin for Lexical. The plugin now clears old suggestions, accurately identifies and splits the target TextNode, and inserts the styled SuggestionNode. Additionally, the editor's theme has been updated to visually differentiate between various suggestion types such as grammar and spelling.\n</info added on 2025-06-17T16:29:55.626Z>",
+            "details": "Ensure that the AI endpoint is triggered correctly, handling asynchronous requests and potential errors efficiently.\n<info added on 2025-06-17T17:24:23.495Z>\nGrammarService endpoint integration has been fully verified. The endpoint is correctly configured with the URL, POST method, and proper JSON payload including text, language, and flags, along with secure Firebase authentication and CORS settings for local development. Request handling is robust with validated payloads, length limits, client-side caching (5-minute TTL), and comprehensive error handling for various cases (401, 429, 5xx). The DocumentEditor’s integration via the useGrammarCheck hook demonstrates effective debouncing (1000ms delay), race condition prevention with unique request IDs and AbortController, and proper state management for loading, errors, and suggestions. Additionally, the retry mechanism and clear user feedback on errors confirm a production-ready integration.\n</info added on 2025-06-17T17:24:23.495Z>",
             "status": "done"
           },
           {
             "id": 5,
-            "title": "Develop Interactive Hover Cards with Keyboard Accessibility",
-            "description": "Create custom hover cards that display detailed suggestions, ensuring that they are fully accessible via keyboard interactions.",
+            "title": "Parse and Map Grammar Suggestions",
+            "description": "Develop logic to parse the responses from GrammarService and map them to appropriate editor markings.",
             "dependencies": [
               4
             ],
-            "details": "Implement proper focus management and ARIA roles to maintain accessibility and user experience standards.",
+            "details": "Extract suggestion data, categorize suggestions, and integrate the parsing mechanism to convert responses into custom visual marks in the Lexical editor.\n<info added on 2025-06-17T17:27:25.648Z>\nImplemented comprehensive enhancement of the suggestion parsing and mapping mechanism. Enhanced the type system by introducing GrammarCategory and CategorizedSuggestions types, supporting categories such as correctness, clarity, engagement, and delivery, and added optional severity levels (low, medium, high). Developed smart categorization logic that maps suggestions based on type, confidence scores, and context analysis—with rules assigning Grammar and Spelling to correctness, punctuation to either correctness or clarity, and style to delivery, engagement, or clarity, defaulting to clarity for unknown types. Upgraded the service layer with an intelligent _categorizeSuggestion() method and integrated these updates via createEditorSuggestions() and a new categorizeSuggestions() utility for UI grouping. Also integrated categorizedSuggestions into DocumentEditor for real-time state updates, enhancing the UI with category-specific counts, color-coded status bars, and visual badges for error or clarity. These improvements ensure efficient, memoized categorization, setting a robust foundation for the upcoming sidebar UI development.\n</info added on 2025-06-17T17:27:25.648Z>",
+            "status": "done"
+          },
+          {
+            "id": 6,
+            "title": "Develop Right Sidebar UI for Suggestions",
+            "description": "Design and implement a right sidebar to display categorized suggestions (Correctness, Clarity, Engagement, Delivery).",
+            "dependencies": [
+              5
+            ],
+            "details": "Create UI components that list suggestions, integrate state management to sync with the editor, and provide a clear categorization of grammar issues.\n<info added on 2025-06-17T17:32:54.757Z>\nAdded comprehensive RIGHT SIDEBAR implementation details: The GrammarSidebar component now features four collapsible, color-coded sections—Correctness, Clarity, Engagement, and Delivery—with dedicated icons and descriptions. Each suggestion is displayed with original and proposed text, detailed explanations, confidence scores, and color-coded type badges for grammar, spelling, punctuation, and style. The component also includes visually appealing empty states (\"Great writing!\") and spinner animations during grammar checks. Integration with the DocumentEditor has been enhanced using a flexbox layout with a fixed 320px sidebar, incorporating event handlers for applying, dismissing, and clearing suggestions, ensuring real-time state synchronization. Additional UI enhancements include category counts in the header, critical error badges, expandable categories, confidence indicators, positional text range details for suggestions, and accessible one-click actions with hover feedback.\n</info added on 2025-06-17T17:32:54.757Z>\n<info added on 2025-06-17T17:53:15.970Z>\nFixed the issue where accepted grammar suggestions only updated the sidebar state without modifying the actual Lexical editor content. The update ensures that handleApplySuggestion now calls editorRef.current.updateContent to trigger a re-render of the editor with the new text. This was accomplished by extending the LexicalEditor component with a LexicalEditorRef interface and implementing the UpdateContentPlugin using forwardRef and a timestamp-based trigger to force content refresh via Lexical’s $getRoot() API. These changes restore proper state synchronization between the React state and the Lexical editor’s internal state, ensuring that accepted changes (e.g., \"do es\" to \"do does\") are accurately reflected in the editor content.\n</info added on 2025-06-17T17:53:15.970Z>\n<info added on 2025-06-17T17:57:46.271Z>\nCritical Fix: Resolved infinite loop issue when accepting suggestions. Previously, handleApplySuggestion triggered updateContent, which in turn caused the editor's onChange event to run checkGrammar repeatedly, leading to an infinite loop. The solution now introduces an isApplyingSuggestion flag (using useRef) to bypass grammar checks during programmatic content updates. handleApplySuggestion sets this flag to true before updating the editor and resets it to false after a 500ms delay, while handleEditorChange now exits early if the flag is active. This update prevents the infinite loop, ensuring smooth suggestion application and consistent grammar rechecking without impacting performance.\n</info added on 2025-06-17T17:57:46.271Z>\n<info added on 2025-06-17T18:10:50.119Z>\nDEBUGGING: Added comprehensive logging to track execution in the suggestion application process. In handleApplySuggestion, logs now capture entry into the function, details of the received suggestion, results of applySuggestion, the progress of updating the editor content, state updates, flag management, and error handling with flag resets. The applySuggestion hook now logs input parameters, available suggestions, GrammarService method calls and outcomes, position corrections, and potential error conditions. Additionally, handleEditorChange includes logs for tracking content modifications, monitoring the isApplyingSuggestion flag status, and distinguishing between triggering or skipping grammar checks. These logs will help identify whether the freeze is due to an infinite loop between editor changes and grammar checks, issues in the GrammarService.applyTextSuggestion method, conflicts with Lexical's updateContent, or excessive React state updates.\n</info added on 2025-06-17T18:10:50.119Z>\n<info added on 2025-06-17T18:17:52.508Z>\nInfinite Loop fix applied: The UpdateContentPlugin now calls editor.update(callback, { discrete: true }), which prevents triggering the OnChangePlugin during programmatic updates. The grammar recheck timeout has been reduced from 1000ms to 100ms, and all debugging logs have been removed for production. This update ensures that the suggestion application mechanism updates the editor content immediately without causing repeated change events, maintaining correct grammar rechecking behavior.\n</info added on 2025-06-17T18:17:52.508Z>",
+            "status": "done"
+          },
+          {
+            "id": 7,
+            "title": "Implement Custom Marks and Interactive Hover Cards",
+            "description": "Enable visual highlighting in the Lexical editor and build interactive hover cards for displaying detailed suggestion information.",
+            "dependencies": [
+              5
+            ],
+            "details": "Add custom mark functionality in the editor; design hover cards with suggestion controls that appear on hover over marked text, ensuring they interact seamlessly with the editor.",
+            "status": "pending"
+          },
+          {
+            "id": 8,
+            "title": "Ensure Keyboard Accessibility and Final Integration",
+            "description": "Test and implement keyboard navigation and accessibility for the sidebar, hover cards, and suggestion controls.",
+            "dependencies": [
+              6,
+              7
+            ],
+            "details": "Conduct accessibility audits to confirm full keyboard support, proper ARIA attributes, and effective state synchronization between the editor and UI components.",
             "status": "pending"
           }
         ]
@@ -699,7 +730,7 @@
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-17T16:34:59.604Z",
+      "updated": "2025-06-17T17:33:25.586Z",
       "description": "Tasks for master context"
     }
   }
