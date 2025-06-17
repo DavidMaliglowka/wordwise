@@ -9,12 +9,16 @@
 
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from 'firebase-functions/params';
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import { z } from "zod";
 import { checkGrammarWithOpenAI, checkGrammarWithOpenAIStreaming } from "./utils/openai";
 import { generateTextHash, getCachedResult, setCachedResult } from "./utils/cache";
-import { GrammarCheckRequest, GrammarCheckResponse } from "./types/grammar";
+import { GrammarCheckResponse } from "./types/grammar";
+
+// Define the OpenAI API key as a secret
+const openaiApiKey = defineSecret('OPENAI_API_KEY');
 
 // Configure global settings
 setGlobalOptions({
@@ -451,7 +455,8 @@ export const health = onRequest({
  * POST /checkGrammar
  */
 export const checkGrammar = onRequest({
-  invoker: 'public'
+  invoker: 'public',
+  secrets: [openaiApiKey]
 }, async (req, res) => {
   try {
     setCorsHeaders(res, req);

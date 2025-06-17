@@ -224,7 +224,7 @@ const DocumentsDashboard: React.FC = () => {
     }
   };
 
-  return (
+    return (
     <DashboardLayout>
       <div className="h-full flex flex-col">
         {/* Content Header */}

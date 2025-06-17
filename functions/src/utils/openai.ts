@@ -1,7 +1,10 @@
 import OpenAI from 'openai';
-import * as functions from 'firebase-functions';
 import * as logger from 'firebase-functions/logger';
-import { GrammarSuggestion, OpenAIGrammarPrompt } from '../types/grammar';
+import { defineSecret } from 'firebase-functions/params';
+import { GrammarSuggestion } from '../types/grammar';
+
+// Define the OpenAI API key as a secret
+const openaiApiKey = defineSecret('OPENAI_API_KEY');
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;
@@ -10,12 +13,12 @@ let openaiClient: OpenAI | null = null;
  * Get or initialize OpenAI client
  * @returns OpenAI client instance
  */
-function getOpenAIClient(): OpenAI {
+function getOpenAI(): OpenAI {
   if (!openaiClient) {
-    const apiKey = functions.config().openai?.key;
+    const apiKey = openaiApiKey.value();
 
     if (!apiKey) {
-      throw new Error('OpenAI API key not configured. Use: firebase functions:config:set openai.key="your-api-key"');
+      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY secret.');
     }
 
     openaiClient = new OpenAI({
@@ -45,6 +48,13 @@ function createSystemPrompt(
 
   return `You are a professional proofreading assistant. Analyze the provided text and identify ${capabilities.join(', ')}.
 
+Be strict and thorough in identifying errors. Common issues to look for:
+- Missing contractions (e.g., "dont" should be "don't")
+- Wrong word usage (e.g., "their" vs "they're" vs "there")
+- Subject-verb disagreement
+- Misspelled words
+- Missing punctuation
+
 For each issue found, provide a JSON object with:
 - "range": {"start": number, "end": number} (character positions)
 - "type": "grammar" | "spelling" | "punctuation" | "style"
@@ -53,8 +63,9 @@ For each issue found, provide a JSON object with:
 - "explanation": "brief explanation of the issue"
 - "confidence": number between 0 and 1
 
-Return ONLY a JSON array of suggestion objects. Do not include any other text or markdown formatting.
-If no issues are found, return an empty array: []`;
+Return a JSON object with a "suggestions" key containing an array of suggestion objects.
+Format: {"suggestions": [array of suggestion objects]}
+If no issues are found, return: {"suggestions": []}`;
 }
 
 /**
@@ -76,10 +87,18 @@ function parseOpenAIResponse(content: string): GrammarSuggestion[] {
     // Clean up the response (remove any markdown formatting)
     const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
-    const suggestions = JSON.parse(cleanContent);
+    const parsed = JSON.parse(cleanContent);
 
-    if (!Array.isArray(suggestions)) {
-      logger.warn('OpenAI response is not an array:', suggestions);
+    // Handle both old and new formats
+    let suggestions: any[];
+    if (Array.isArray(parsed)) {
+      // Old format: direct array
+      suggestions = parsed;
+    } else if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+      // New format: object with suggestions key
+      suggestions = parsed.suggestions;
+    } else {
+      logger.warn('OpenAI response format unrecognized:', parsed);
       return [];
     }
 
@@ -128,7 +147,7 @@ export async function checkGrammarWithOpenAI(
   } = options;
 
   try {
-    const client = getOpenAIClient();
+    const client = getOpenAI();
 
     const systemPrompt = createSystemPrompt(includeSpelling, includeGrammar, includeStyle);
     const userPrompt = createUserPrompt(text);
@@ -206,7 +225,7 @@ export async function checkGrammarWithOpenAIStreaming(
   } = options;
 
   try {
-    const client = getOpenAIClient();
+    const client = getOpenAI();
 
     const systemPrompt = createSystemPrompt(includeSpelling, includeGrammar, includeStyle);
     const userPrompt = createUserPrompt(text);
