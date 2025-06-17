@@ -150,13 +150,19 @@ export class GrammarService {
 
       const result = data.data;
 
+      // Parse and validate the suggestions from the API response
+      const validatedSuggestions = result.suggestions
+        ? this._parseAndValidateSuggestions(result.suggestions)
+        : [];
+
       // Cache successful result
-      if (useCache && result.suggestions) {
-        grammarCache.set(text, { language, includeSpelling, includeGrammar, includeStyle }, result.suggestions);
+      if (useCache && validatedSuggestions.length > 0) {
+        grammarCache.set(text, { language, includeSpelling, includeGrammar, includeStyle }, validatedSuggestions);
       }
 
       return {
         ...result,
+        suggestions: validatedSuggestions,
         processingTimeMs: result.processingTimeMs || (Date.now() - startTime)
       };
 
@@ -179,6 +185,63 @@ export class GrammarService {
       // Generic error
       throw createGrammarError(error.message || 'An unexpected error occurred', undefined, 'api');
     }
+  }
+
+  /**
+   * Parses and validates raw suggestions from the API.
+   * Filters out any malformed suggestion objects.
+   */
+  private static _parseAndValidateSuggestions(rawSuggestions: any[]): GrammarSuggestion[] {
+    if (!Array.isArray(rawSuggestions)) {
+      console.warn('Grammar API returned non-array suggestions:', rawSuggestions);
+      return [];
+    }
+
+    const validated: GrammarSuggestion[] = [];
+
+    rawSuggestions.forEach((s, index) => {
+      // Basic structure validation
+      if (
+        typeof s !== 'object' ||
+        s === null ||
+        typeof s.type !== 'string' ||
+        typeof s.range !== 'object' ||
+        typeof s.range.start !== 'number' ||
+        typeof s.range.end !== 'number' ||
+        typeof s.original !== 'string' ||
+        typeof s.proposed !== 'string' ||
+        typeof s.explanation !== 'string'
+      ) {
+        console.warn(`Malformed suggestion at index ${index} skipped:`, s);
+        return; // Skip this suggestion
+      }
+
+      // Ensure range is valid
+      if (s.range.start > s.range.end || s.range.start < 0) {
+        console.warn(`Invalid range in suggestion at index ${index} skipped:`, s);
+        return;
+      }
+
+      // Validate confidence, default if missing
+      let confidence = 0.9; // Default confidence
+      if (typeof s.confidence === 'number' && s.confidence >= 0 && s.confidence <= 1) {
+        confidence = s.confidence;
+      } else if (s.confidence !== undefined) {
+        console.warn(`Invalid confidence in suggestion at index ${index} (using default):`, s);
+      }
+
+      // If everything is okay, add to the validated list
+      validated.push({
+        type: s.type,
+        range: { start: s.range.start, end: s.range.end },
+        original: s.original,
+        proposed: s.proposed,
+        explanation: s.explanation,
+        confidence,
+      });
+    });
+
+    return validated;
   }
 
   /**
@@ -246,10 +309,29 @@ export class GrammarService {
     suggestion: GrammarSuggestion,
     appliedSuggestions: GrammarSuggestion[] = []
   ): { newText: string; positionDelta: number } {
-    // Sort applied suggestions by start position (latest first) to calculate position drift
-    const sortedApplied = appliedSuggestions.sort((a, b) => b.range.start - a.range.start);
+    // 1. Try a robust word boundary search first, as AI ranges can be unreliable.
+    // This regex matches the word and captures optional trailing punctuation.
+    const wordBoundaryRegex = new RegExp(`\\b(${suggestion.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})([.,?!]?)\\b`, 'i');
+    const match = wordBoundaryRegex.exec(text);
 
-    // Calculate position offset from previously applied suggestions
+    if (match && match.index !== undefined) {
+      const matchedWord = match[1]; // The actual word "tommorow"
+      const trailingPunctuation = match[2] || ''; // The "." or empty string
+
+      // Preserve punctuation in the replacement
+      const replacementText = suggestion.proposed + trailingPunctuation;
+
+      const before = text.substring(0, match.index);
+      const after = text.substring(match.index + matchedWord.length + trailingPunctuation.length);
+      const newText = before + replacementText + after;
+      const positionDelta = replacementText.length - (matchedWord.length + trailingPunctuation.length);
+
+      return { newText, positionDelta };
+    }
+
+    // 2. Fallback to using the suggestion's range if the regex fails.
+    // This maintains the existing position drift logic for more complex cases.
+    const sortedApplied = appliedSuggestions.sort((a, b) => b.range.start - a.range.start);
     let positionOffset = 0;
     for (const applied of sortedApplied) {
       if (applied.range.start < suggestion.range.start) {
@@ -258,63 +340,20 @@ export class GrammarService {
       }
     }
 
-    // Adjust the suggestion range based on position drift
     const adjustedStart = suggestion.range.start + positionOffset;
     const adjustedEnd = suggestion.range.end + positionOffset;
 
-    // Validate adjusted positions
     if (adjustedStart < 0 || adjustedEnd > text.length || adjustedStart > adjustedEnd) {
       throw new Error(`Invalid suggestion position after adjustment: start=${adjustedStart}, end=${adjustedEnd}, textLength=${text.length}`);
     }
 
-    // Extract the text to be replaced and verify it matches the original
     const textToReplace = text.substring(adjustedStart, adjustedEnd);
 
-    // More flexible matching - handle case differences and extra whitespace
-    const normalizeForComparison = (str: string) => str.toLowerCase().trim();
-    if (normalizeForComparison(textToReplace) !== normalizeForComparison(suggestion.original)) {
-      // Try to find the text nearby (within 10 characters) in case of minor position drift
-      const searchStart = Math.max(0, adjustedStart - 10);
-      const searchEnd = Math.min(text.length, adjustedEnd + 10);
-      const searchArea = text.substring(searchStart, searchEnd);
-      const originalNormalized = normalizeForComparison(suggestion.original);
-
-      const foundIndex = searchArea.toLowerCase().indexOf(originalNormalized);
-      if (foundIndex >= 0) {
-        // Recalculate positions based on found text
-        const newStart = searchStart + foundIndex;
-        const newEnd = newStart + suggestion.original.length;
-
-        // Apply replacement with corrected positions
-        const before = text.substring(0, newStart);
-        const after = text.substring(newEnd);
-        const newText = before + suggestion.proposed + after;
-        const positionDelta = suggestion.proposed.length - suggestion.original.length;
-
-        return { newText, positionDelta };
-      }
-
-      // If fuzzy search fails, try a broader search for the exact word
-      const wordBoundaryRegex = new RegExp(`\\b${suggestion.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-      const match = wordBoundaryRegex.exec(text);
-
-      if (match && match.index !== undefined) {
-        const before = text.substring(0, match.index);
-        const after = text.substring(match.index + match[0].length);
-        const newText = before + suggestion.proposed + after;
-        const positionDelta = suggestion.proposed.length - match[0].length;
-
-        return { newText, positionDelta };
-      }
-
-      throw new Error(`Text mismatch: expected "${suggestion.original}" but found "${textToReplace}". Could not locate text for replacement.`);
-    }
-
-    // Apply the replacement
+    // Apply the replacement if it's a simple match
     const before = text.substring(0, adjustedStart);
     const after = text.substring(adjustedEnd);
     const newText = before + suggestion.proposed + after;
-    const positionDelta = suggestion.proposed.length - suggestion.original.length;
+    const positionDelta = suggestion.proposed.length - textToReplace.length;
 
     return { newText, positionDelta };
   }

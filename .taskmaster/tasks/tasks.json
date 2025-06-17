@@ -415,8 +415,8 @@
             "dependencies": [
               2
             ],
-            "details": "Create robust parsing logic to handle different response formats and edge cases, ensuring data consistency.",
-            "status": "pending"
+            "details": "Create robust parsing logic to handle different response formats and edge cases, ensuring data consistency.\n<info added on 2025-06-17T16:26:47.164Z>\nImplemented a robust parsing and validation layer in GrammarService to process suggestions from the AI endpoint. Introduced the private method _parseAndValidateSuggestions, which meticulously verifies that each suggestion meets the expected data structure and type requirements, including proper handling of the confidence score. Any malformed or incomplete suggestions are filtered out safely with warnings logged for debugging, thereby increasing the system's resilience to API variations.\n</info added on 2025-06-17T16:26:47.164Z>",
+            "status": "done"
           },
           {
             "id": 4,
@@ -425,8 +425,8 @@
             "dependencies": [
               3
             ],
-            "details": "Focus on rendering dynamic, real-time highlights that update seamlessly as suggestions change.",
-            "status": "pending"
+            "details": "Focus on rendering dynamic, real-time highlights that update seamlessly as suggestions change.\n<info added on 2025-06-17T16:29:55.626Z>\nImplemented the core logic for dynamic suggestion highlighting by creating a custom SuggestionNode and SuggestionPlugin for Lexical. The plugin now clears old suggestions, accurately identifies and splits the target TextNode, and inserts the styled SuggestionNode. Additionally, the editor's theme has been updated to visually differentiate between various suggestion types such as grammar and spelling.\n</info added on 2025-06-17T16:29:55.626Z>",
+            "status": "done"
           },
           {
             "id": 5,
@@ -699,7 +699,7 @@
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-17T08:08:34.152Z",
+      "updated": "2025-06-17T16:34:59.604Z",
       "description": "Tasks for master context"
     }
   }
