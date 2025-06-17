@@ -73,17 +73,33 @@ export function useGrammarDebounce(
 
   const trigger = useCallback(
     (text: string) => {
+      console.log('🔧 Grammar debounce trigger called:');
+      console.log('Text length:', text.length);
+      console.log('Min length:', minLength);
+      console.log('Last text:', JSON.stringify(lastTextRef.current));
+      console.log('Current text:', JSON.stringify(text));
+      console.log('Text unchanged?', text === lastTextRef.current);
+
       // Cancel previous timeout
       if (timeoutRef.current) {
+        console.log('🔧 Cancelling previous timeout');
         clearTimeout(timeoutRef.current);
       }
 
       // Skip if text is too short or unchanged
-      if (text.length < minLength || text === lastTextRef.current) {
+      if (text.length < minLength) {
+        console.log('🔧 Text too short, skipping');
         return;
       }
 
+      if (text === lastTextRef.current) {
+        console.log('🔧 Text unchanged, skipping');
+        return;
+      }
+
+      console.log('🔧 Setting timeout for grammar check');
       timeoutRef.current = setTimeout(() => {
+        console.log('🔧 Timeout fired, calling grammar check');
         lastTextRef.current = text;
         callbackRef.current(text);
       }, delay);
@@ -109,10 +125,20 @@ export function useGrammarDebounce(
     }
   }, [minLength]);
 
+  const reset = useCallback(() => {
+    console.log('🔧 Resetting debounce cache');
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = undefined;
+    }
+    lastTextRef.current = '';
+  }, []);
+
   return {
     trigger,
     cancel,
     flush,
+    reset,
     isActive: () => timeoutRef.current !== undefined
   };
 }

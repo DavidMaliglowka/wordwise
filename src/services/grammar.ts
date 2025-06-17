@@ -21,7 +21,13 @@ class GrammarCache {
   private generateKey(text: string, options: Partial<GrammarCheckRequest>): string {
     const { includeSpelling = true, includeGrammar = true, includeStyle = false, language = 'en' } = options;
     const key = `${text.trim()}_${language}_${includeSpelling}_${includeGrammar}_${includeStyle}`;
-    return btoa(key); // base64 encode for safe storage
+    // Use btoa with TextEncoder to handle Unicode characters safely
+    try {
+      return btoa(unescape(encodeURIComponent(key)));
+    } catch (error) {
+      // Fallback: create a simple hash-like key if encoding fails
+      return key.replace(/[^\w\-_]/g, '_').substring(0, 100);
+    }
   }
 
   get(text: string, options: Partial<GrammarCheckRequest>): GrammarSuggestion[] | null {

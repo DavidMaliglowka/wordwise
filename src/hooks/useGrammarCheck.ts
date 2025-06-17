@@ -48,7 +48,12 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
 
   // Grammar check function
   const performGrammarCheck = useCallback(async (text: string) => {
-    if (!GrammarService.isAuthenticated()) {
+    console.log('🔧 Checking authentication...');
+    const isAuth = GrammarService.isAuthenticated();
+    console.log('🔧 Is authenticated:', isAuth);
+
+    if (!isAuth) {
+      console.log('🔧 Authentication failed');
       setError({
         message: 'Please sign in to use grammar checking',
         type: 'auth'
@@ -56,8 +61,38 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
       return;
     }
 
-    const validation = GrammarService.validateText(text);
+    // Normalize text to handle problematic characters
+    const normalizedText = text
+      // Normalize Unicode (decomposed to composed)
+      .normalize('NFC')
+      // Replace smart quotes with regular quotes
+      .replace(/[""]/g, '"')
+      .replace(/['']/g, "'")
+      // Replace em/en dashes with regular hyphens
+      .replace(/[—–]/g, '-')
+      // Replace non-breaking spaces with regular spaces
+      .replace(/\u00A0/g, ' ')
+      // Replace other problematic whitespace characters
+      .replace(/[\u2000-\u200B\u2028\u2029\uFEFF]/g, ' ')
+      // Clean up multiple spaces
+      .replace(/\s+/g, ' ')
+      // Trim
+      .trim();
+
+    // Debug: Log the original and normalized text
+    if (text !== normalizedText) {
+      console.log('🔧 Text normalization applied:');
+      console.log('Original length:', text.length);
+      console.log('Normalized length:', normalizedText.length);
+      console.log('Original (first 100 chars):', JSON.stringify(text.substring(0, 100)));
+      console.log('Normalized (first 100 chars):', JSON.stringify(normalizedText.substring(0, 100)));
+    }
+
+    console.log('🔧 Validating normalized text...');
+    const validation = GrammarService.validateText(normalizedText);
+    console.log('🔧 Validation result:', validation);
     if (!validation.isValid) {
+      console.log('🔧 Validation failed:', validation.error);
       setError({
         message: validation.error || 'Invalid text',
         type: 'validation'
@@ -74,38 +109,62 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
     abortControllerRef.current = new AbortController();
     const requestId = ++currentRequestRef.current;
 
+    console.log('🔧 Starting grammar check...');
     setIsLoading(true);
     setError(null);
 
     try {
+            console.log('🔧 Calling GrammarService.checkGrammar with:', {
+        textLength: normalizedText.length,
+        language: 'en',
+        includeSpelling: config.includeSpelling,
+        includeGrammar: config.includeGrammar,
+        includeStyle: config.includeStyle,
+        enableCache: config.enableCache
+      });
+
+      // Force no cache to bypass the cached empty result
       const response = await GrammarService.checkGrammar({
-        text,
+        text: normalizedText,
         language: 'en',
         includeSpelling: config.includeSpelling,
         includeGrammar: config.includeGrammar,
         includeStyle: config.includeStyle
-      }, config.enableCache);
+      }, false); // Force no cache
+
+      console.log('🔧 Grammar check response:', response);
 
       // Check if this is still the current request
       if (requestId === currentRequestRef.current) {
         const editorSuggestions = GrammarService.createEditorSuggestions(response.suggestions);
         setSuggestions(editorSuggestions);
-        setLastCheckedText(text);
+        setLastCheckedText(normalizedText); // Store normalized text
         setError(null);
         // Reset applied suggestions for new text
         appliedSuggestionsRef.current = [];
       }
     } catch (err: any) {
+      console.log('🔧 Grammar check error:', err);
+      console.log('🔧 Error details:', {
+        name: err.name,
+        message: err.message,
+        type: err.type,
+        requestId,
+        currentRequestId: currentRequestRef.current
+      });
+
       // Only update state if this is still the current request and not aborted
       if (requestId === currentRequestRef.current && err.name !== 'AbortError') {
         const grammarError: GrammarCheckError = err.type ? err : {
           message: err.message || 'Grammar check failed',
           type: 'api'
         };
+        console.log('🔧 Setting error state:', grammarError);
         setError(grammarError);
         setSuggestions([]); // Clear suggestions on error
       }
     } finally {
+      console.log('🔧 Grammar check finally block, setting loading to false');
       // Only update loading state if this is still the current request
       if (requestId === currentRequestRef.current) {
         setIsLoading(false);
@@ -114,7 +173,7 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
   }, [config.includeSpelling, config.includeGrammar, config.includeStyle, config.enableCache]);
 
   // Set up debounced grammar checking
-  const { trigger: triggerGrammarCheck, cancel: cancelGrammarCheck } = useGrammarDebounce(
+  const { trigger: triggerGrammarCheck, cancel: cancelGrammarCheck, reset: resetGrammarCheck } = useGrammarDebounce(
     performGrammarCheck,
     config.delay,
     config.minLength
@@ -122,18 +181,24 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
 
   // Public API methods
   const checkText = useCallback((text: string) => {
+    console.log('🔧 checkText called with:', {
+      length: text.length,
+      firstChars: JSON.stringify(text.substring(0, 50))
+    });
     setError(null); // Clear previous errors
     triggerGrammarCheck(text);
   }, [triggerGrammarCheck]);
 
   const clearSuggestions = useCallback(() => {
     cancelGrammarCheck();
+    resetGrammarCheck(); // Reset the debounce cache
+    GrammarService.clearCache(); // Clear the grammar service cache
     setSuggestions([]);
     setError(null);
     setLastCheckedText('');
     setIsLoading(false);
     appliedSuggestionsRef.current = [];
-  }, [cancelGrammarCheck]);
+  }, [cancelGrammarCheck, resetGrammarCheck]);
 
   const dismissSuggestion = useCallback((suggestionId: string) => {
     setSuggestions(prev =>

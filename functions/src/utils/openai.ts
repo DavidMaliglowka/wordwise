@@ -1,6 +1,7 @@
-import OpenAI from 'openai';
+import OpenAI, { APIError } from 'openai';
 import * as logger from 'firebase-functions/logger';
 import { defineSecret } from 'firebase-functions/params';
+import { z } from 'zod';
 import { GrammarSuggestion } from '../types/grammar';
 
 // Define the OpenAI API key as a secret
@@ -29,12 +30,85 @@ function getOpenAI(): OpenAI {
   return openaiClient;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Zod schema for runtime validation                                 */
+/* ------------------------------------------------------------------ */
+const suggestionSchema = z.object({
+  range: z.object({
+    start: z.number().int().min(0),
+    end: z.number().int().min(0)
+  }),
+  type: z.enum(['grammar', 'spelling', 'punctuation', 'style']),
+  original: z.string().min(1),
+  proposed: z.string().min(1),
+  explanation: z.string().min(1),
+  confidence: z.number().min(0.8).max(1.0), // Keep our 0.8-1.0 range
+});
+
+const toolResponseSchema = z.object({
+  suggestions: z.array(suggestionSchema)
+});
+
+/* ------------------------------------------------------------------ */
+/*  Function-calling tool definition                                  */
+/* ------------------------------------------------------------------ */
+const grammarCheckerTool = {
+  type: 'function' as const,
+  function: {
+    name: 'grammar_checker',
+    description: 'Analyze text for grammar, spelling, punctuation, and style issues with precise position tracking.',
+    parameters: {
+      type: 'object',
+      properties: {
+        suggestions: {
+          type: 'array',
+          description: 'Array of grammar suggestions with exact character positions',
+          items: {
+            type: 'object',
+            properties: {
+              range: {
+                type: 'object',
+                properties: {
+                  start: { type: 'number', description: 'Start character position (0-indexed)' },
+                  end: { type: 'number', description: 'End character position (0-indexed)' }
+                },
+                required: ['start', 'end']
+              },
+              type: {
+                type: 'string',
+                enum: ['grammar', 'spelling', 'punctuation', 'style'],
+                description: 'Type of language issue'
+              },
+              original: {
+                type: 'string',
+                description: 'Exact text to replace (must match text at range positions)'
+              },
+              proposed: {
+                type: 'string',
+                description: 'Grammatically correct replacement text'
+              },
+              explanation: {
+                type: 'string',
+                description: 'Clear explanation of why this change improves the text'
+              },
+              confidence: {
+                type: 'number',
+                minimum: 0.8,
+                maximum: 1.0,
+                description: 'Confidence level (0.8-1.0, be confident in grammar rules)'
+              }
+            },
+            required: ['range', 'type', 'original', 'proposed', 'explanation', 'confidence']
+          }
+        }
+      },
+      required: ['suggestions']
+    }
+  }
+};
+
 /**
- * Create a system prompt for grammar and spelling correction
- * @param includeSpelling - Whether to include spelling corrections
- * @param includeGrammar - Whether to include grammar corrections
- * @param includeStyle - Whether to include style suggestions
- * @returns System prompt string
+ * Create a concise system prompt that works with function-calling
  */
 function createSystemPrompt(
   includeSpelling: boolean = true,
@@ -46,117 +120,114 @@ function createSystemPrompt(
   if (includeSpelling) capabilities.push('spelling mistakes');
   if (includeStyle) capabilities.push('style improvements');
 
-  return `You are an expert grammar and language checker. Analyze the provided text and identify ${capabilities.join(', ')}.
+  return `You are an expert grammar checker. Analyze text for ${capabilities.join(', ')} with these priorities:
+
+1. SUBJECT-VERB AGREEMENT: Ensure verbs match subjects (singular/plural, person)
+2. CONTEXTUAL WORD CHOICE: "their" vs "they're", "its" vs "it's"
+3. SPELLING: Only flag actual misspellings
+4. PUNCTUATION: Be consistent, avoid contradictory suggestions
 
 CRITICAL RULES:
-1. CONSISTENCY: Always be consistent in your suggestions. If you suggest adding a comma, don't suggest removing it later.
-2. CONTEXT ANALYSIS: Analyze the ENTIRE sentence before making suggestions.
-3. DESCRIPTION ACCURACY: Ensure your explanation exactly matches your proposed change.
+- CONSISTENCY: Don't suggest adding then removing the same punctuation
+- ACCURACY: Ensure explanations match the actual change being made
+- PRECISION: Use exact character positions and matching text
 
-Key priorities in order:
-1. SUBJECT-VERB AGREEMENT: Check if verbs match their subjects (singular/plural, person)
-2. CONTEXTUAL WORD CHOICE: Ensure words fit the grammatical context (e.g., "their" vs "they're")
-3. CONTRACTIONS: Suggest appropriate contractions based on subject-verb agreement
-4. SPELLING: Only flag actual misspellings, not contextual word choice errors
-5. PUNCTUATION: Be consistent with comma usage based on sentence structure
+Common patterns:
+- "She dont" → "She doesn't" (3rd person singular)
+- "They dont" → "They don't" (plural)
+- "their going" → "they're going" (contraction)
 
-Common patterns to watch for:
-- "She dont" → "She doesn't" (NOT "She don't" - third person singular requires "doesn't")
-- "He dont" → "He doesn't" (NOT "He don't")
-- "They dont" → "They don't" (correct for plural)
-- "I dont" → "I don't" (correct for first person)
-- "You dont" → "You don't" (correct for second person)
-- "their going" → "they're going" (contraction of "they are")
-- "your going" → "you're going" (contraction of "you are")
-- "its vs it's" → Check if possessive or contraction is needed
-
-PUNCTUATION CONSISTENCY:
-- For interrogative words like "Where", only suggest adding a comma if it's truly needed for clarity
-- Don't suggest contradictory punctuation changes
-- Consider the sentence structure: "Where does this go wrong?" may not need a comma
-
-DESCRIPTION ACCURACY:
-- If suggesting "Where," → "Where" (removing comma), explain "removing unnecessary comma"
-- If suggesting "Where" → "Where," (adding comma), explain "adding comma for clarity"
-- If suggesting "w" → "W" (capitalization), explain "capitalizing first letter"
-- If suggesting "W" → "w" (lowercasing), explain "changing to lowercase"
-
-ALWAYS verify subject-verb agreement BEFORE suggesting contractions. The subject determines the correct verb form.
-
-For each issue found, provide a JSON object with:
-- "range": {"start": number, "end": number} (exact character positions)
-- "type": "grammar" | "spelling" | "punctuation" | "style"
-- "original": "exact text to replace" (must match exactly what you want to change)
-- "proposed": "grammatically correct replacement" (the exact replacement text)
-- "explanation": "clear explanation that accurately describes the change being made"
-- "confidence": number between 0.8 and 1.0 (be confident in grammar rules)
-
-Return only: {"suggestions": [array of suggestion objects]}
-If no issues are found, return: {"suggestions": []}`;
+Use the grammar_checker function to return structured results.`;
 }
 
 /**
- * Create a user prompt with the text to check
- * @param text - Text to analyze
- * @returns User prompt string
+ * Create user prompt with the text to analyze
  */
 function createUserPrompt(text: string): string {
-  return `Analyze this text for grammar and language errors. Pay special attention to subject-verb agreement and ensure all suggestions are contextually appropriate:
+  return `Analyze this text for grammar and language errors:
 
 "${text}"
 
-Remember: Consider the full grammatical context of each sentence before making suggestions.`;
+Return precise suggestions with exact character positions.`;
 }
 
 /**
- * Parse OpenAI response into structured suggestions
- * @param content - OpenAI response content
- * @returns Array of grammar suggestions
+ * Parse and validate OpenAI tool response
  */
-function parseOpenAIResponse(content: string): GrammarSuggestion[] {
+function parseToolResponse(toolCallArguments: string): GrammarSuggestion[] {
   try {
-    // Clean up the response (remove any markdown formatting)
-    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(toolCallArguments);
+    const result = toolResponseSchema.safeParse(parsed);
 
-    const parsed = JSON.parse(cleanContent);
-
-    // Handle both old and new formats
-    let suggestions: any[];
-    if (Array.isArray(parsed)) {
-      // Old format: direct array
-      suggestions = parsed;
-    } else if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-      // New format: object with suggestions key
-      suggestions = parsed.suggestions;
-    } else {
-      logger.warn('OpenAI response format unrecognized:', parsed);
+    if (!result.success) {
+      logger.error('Tool response validation failed:', {
+        error: result.error.format(),
+        rawArguments: toolCallArguments
+      });
       return [];
     }
 
-    // Validate each suggestion
-    return suggestions.filter((suggestion: any) => {
-      if (!suggestion.range || !suggestion.type || !suggestion.original || !suggestion.proposed) {
-        logger.warn('Invalid suggestion structure:', suggestion);
+    // Additional validation: ensure range.end > range.start
+    const validSuggestions = result.data.suggestions.filter(suggestion => {
+      if (suggestion.range.end <= suggestion.range.start) {
+        logger.warn('Invalid range in suggestion:', suggestion);
         return false;
       }
-
-      // Ensure confidence is between 0 and 1
-      if (typeof suggestion.confidence !== 'number' || suggestion.confidence < 0 || suggestion.confidence > 1) {
-        suggestion.confidence = 0.8; // Default confidence
-      }
-
       return true;
-    }) as GrammarSuggestion[];
+    });
 
+    return validSuggestions;
   } catch (error) {
-    logger.error('Error parsing OpenAI response:', error);
-    logger.error('Response content:', content);
+    logger.error('Error parsing tool response:', {
+      error: error instanceof Error ? error.message : String(error),
+      rawArguments: toolCallArguments.length > 1000 ?
+        toolCallArguments.substring(0, 1000) + '... (truncated)' :
+        toolCallArguments,
+      argumentsLength: toolCallArguments.length
+    });
+
+    // If it's a JSON parsing error, it might be due to truncation
+    if (error instanceof Error && error.message.includes('JSON')) {
+      logger.warn('JSON parsing failed - likely due to token limit truncation. Consider increasing maxTokens.');
+    }
+
     return [];
   }
 }
 
 /**
- * Check text for grammar and spelling issues using OpenAI
+ * Handle OpenAI API errors with detailed logging
+ */
+function handleOpenAIError(error: unknown): never {
+  if (error instanceof APIError) {
+    logger.error('OpenAI API error:', {
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      type: error.type
+    });
+
+    switch (error.status) {
+      case 401:
+        throw new Error('OpenAI API authentication failed');
+      case 429:
+        throw new Error('OpenAI API rate limit exceeded');
+      case 400:
+        throw new Error('Invalid request to OpenAI API');
+      default:
+        throw new Error(`OpenAI API error ${error.status}: ${error.message}`);
+    }
+  }
+
+  // Non-API errors
+  logger.error('Unexpected error in OpenAI call:', {
+    error: error instanceof Error ? error.message : String(error)
+  });
+  throw error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * Check text for grammar and spelling issues using OpenAI with function-calling
  * @param text - Text to analyze
  * @param options - Check options
  * @returns Promise<GrammarSuggestion[]>
@@ -174,7 +245,7 @@ export async function checkGrammarWithOpenAI(
     includeSpelling = true,
     includeGrammar = true,
     includeStyle = false,
-    maxTokens = 1000
+    maxTokens = 4000 // Increased from 1000 to handle more suggestions
   } = options;
 
   try {
@@ -187,7 +258,8 @@ export async function checkGrammarWithOpenAI(
       textLength: text.length,
       includeSpelling,
       includeGrammar,
-      includeStyle
+      includeStyle,
+      model: 'gpt-4o'
     });
 
     const completion = await client.chat.completions.create({
@@ -197,37 +269,32 @@ export async function checkGrammarWithOpenAI(
         { role: 'user', content: userPrompt }
       ],
       max_tokens: maxTokens,
-      temperature: 0.1, // Low temperature for consistent results
-      response_format: { type: 'json_object' } // Ensure JSON response
+      temperature: 0, // Deterministic
+      top_p: 0, // Deterministic
+      seed: 42, // Consistent results
+      tools: [grammarCheckerTool],
+      tool_choice: { type: 'function', function: { name: 'grammar_checker' } }
     });
 
-    const content = completion.choices[0]?.message?.content;
+    const toolCall = completion.choices[0]?.message?.tool_calls?.[0];
 
-    if (!content) {
-      logger.warn('No content received from OpenAI');
+    if (!toolCall || toolCall.function.name !== 'grammar_checker') {
+      logger.warn('No valid tool call in OpenAI response');
       return [];
     }
 
+    const suggestions = parseToolResponse(toolCall.function.arguments);
+
     logger.info('OpenAI API call successful', {
       usage: completion.usage,
-      responseLength: content.length
+      suggestionsCount: suggestions.length,
+      requestId: completion.id
     });
 
-    return parseOpenAIResponse(content);
+    return suggestions;
 
   } catch (error: any) {
-    logger.error('Error calling OpenAI API:', error);
-
-    // Handle specific OpenAI errors
-    if (error.status === 401) {
-      throw new Error('OpenAI API authentication failed');
-    } else if (error.status === 429) {
-      throw new Error('OpenAI API rate limit exceeded');
-    } else if (error.status === 400) {
-      throw new Error('Invalid request to OpenAI API');
-    }
-
-    throw new Error(`OpenAI API error: ${error.message}`);
+    handleOpenAIError(error);
   }
 }
 
@@ -252,7 +319,7 @@ export async function checkGrammarWithOpenAIStreaming(
     includeSpelling = true,
     includeGrammar = true,
     includeStyle = false,
-    maxTokens = 1000
+    maxTokens = 4000 // Increased from 1000 to handle more suggestions
   } = options;
 
   try {
@@ -262,7 +329,8 @@ export async function checkGrammarWithOpenAIStreaming(
     const userPrompt = createUserPrompt(text);
 
     logger.info('Calling OpenAI API for streaming grammar check', {
-      textLength: text.length
+      textLength: text.length,
+      model: 'gpt-4o'
     });
 
     const stream = await client.chat.completions.create({
@@ -272,30 +340,37 @@ export async function checkGrammarWithOpenAIStreaming(
         { role: 'user', content: userPrompt }
       ],
       max_tokens: maxTokens,
-      temperature: 0.1,
-      stream: true
+      temperature: 0, // Deterministic
+      top_p: 0, // Deterministic
+      seed: 42, // Consistent results
+      stream: true,
+      tools: [grammarCheckerTool],
+      tool_choice: { type: 'function', function: { name: 'grammar_checker' } }
     });
 
-    let fullContent = '';
+    let argumentsBuffer = '';
 
     for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        fullContent += content;
+      const delta = chunk.choices[0]?.delta;
+      if (delta?.tool_calls?.[0]?.function?.arguments) {
+        const argumentChunk = delta.tool_calls[0].function.arguments;
+        argumentsBuffer += argumentChunk;
         if (onChunk) {
-          onChunk(content);
+          onChunk(argumentChunk);
         }
       }
     }
 
+    const suggestions = parseToolResponse(argumentsBuffer);
+
     logger.info('OpenAI streaming API call completed', {
-      responseLength: fullContent.length
+      responseLength: argumentsBuffer.length,
+      suggestionsCount: suggestions.length
     });
 
-    return parseOpenAIResponse(fullContent);
+    return suggestions;
 
   } catch (error: any) {
-    logger.error('Error in streaming OpenAI API call:', error);
-    throw new Error(`OpenAI streaming error: ${error.message}`);
+    handleOpenAIError(error);
   }
 }

@@ -140,6 +140,9 @@ const DocumentEditor: React.FC = () => {
           characterCount: docData.content?.length || 0,
           isEmpty: !docData.content || docData.content.trim().length === 0,
         });
+
+        // Clear suggestions and reset grammar check cache when loading document
+        clearSuggestions();
       } catch (error) {
         console.error('Error loading document:', error);
         navigate('/dashboard');
@@ -161,8 +164,14 @@ const DocumentEditor: React.FC = () => {
       return;
     }
 
-    // Trigger grammar checking on content change
+    // Debug: Log text content details
     if (stateData.content && stateData.content.trim().length > 0) {
+      console.log('🔧 Editor content changed:');
+      console.log('Content length:', stateData.content.length);
+      console.log('Trimmed length:', stateData.content.trim().length);
+      console.log('First 100 chars:', JSON.stringify(stateData.content.substring(0, 100)));
+      console.log('Character codes (first 20):', stateData.content.substring(0, 20).split('').map(c => c.charCodeAt(0)));
+
       checkGrammar(stateData.content);
     } else {
       // Clear suggestions if content is empty
