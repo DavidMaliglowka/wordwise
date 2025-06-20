@@ -46,6 +46,8 @@ interface LexicalEditorProps {
   onGrammarSuggestionClick?: (suggestion: EditorSuggestion) => void;
   onApplyGrammarSuggestion?: (suggestion: EditorSuggestion) => void;
   onDismissGrammarSuggestion?: (suggestionId: string) => void;
+  onGrammarMarkApplicationStart?: () => void;
+  onGrammarMarkApplicationEnd?: () => void;
 }
 
 // Hook to initialize content
@@ -216,6 +218,8 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   onGrammarSuggestionClick,
   onApplyGrammarSuggestion,
   onDismissGrammarSuggestion,
+  onGrammarMarkApplicationStart,
+  onGrammarMarkApplicationEnd,
 }, ref) => {
   const [updateTrigger, setUpdateTrigger] = React.useState<{ content: string; timestamp: number } | null>(null);
   const [editorElement, setEditorElement] = useState<HTMLElement | null>(null);
@@ -333,6 +337,8 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
               suggestions={grammarSuggestions}
               onSuggestionHover={onGrammarSuggestionHover}
               onSuggestionClick={onGrammarSuggestionClick}
+              onMarkApplicationStart={onGrammarMarkApplicationStart}
+              onMarkApplicationEnd={onGrammarMarkApplicationEnd}
             />
           </div>
           {!readOnly && (

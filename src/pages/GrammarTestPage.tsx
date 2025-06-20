@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
 import GrammarTest from '../components/test/GrammarTest';
+import GrammarIntegrationTest from '../components/test/GrammarIntegrationTest';
 
 const GrammarTestPage: React.FC = () => {
   const { user, loading } = useAuthContext();
+  const [activeTest, setActiveTest] = useState<'basic' | 'integration'>('integration');
 
   if (loading) {
     return (
@@ -44,6 +46,28 @@ const GrammarTestPage: React.FC = () => {
               <p className="text-sm text-gray-600">Test the AI-powered grammar checking functionality</p>
             </div>
             <div className="flex items-center gap-4">
+              <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setActiveTest('integration')}
+                  className={`px-3 py-1 text-sm rounded ${
+                    activeTest === 'integration'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Integration Test
+                </button>
+                <button
+                  onClick={() => setActiveTest('basic')}
+                  className={`px-3 py-1 text-sm rounded ${
+                    activeTest === 'basic'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Basic Test
+                </button>
+              </div>
               <span className="text-sm text-gray-600">Signed in as {user.email}</span>
               <a
                 href="/dashboard"
@@ -56,7 +80,7 @@ const GrammarTestPage: React.FC = () => {
         </div>
       </div>
 
-      <GrammarTest />
+      {activeTest === 'integration' ? <GrammarIntegrationTest /> : <GrammarTest />}
     </div>
   );
 };

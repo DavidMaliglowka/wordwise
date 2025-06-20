@@ -42,7 +42,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
   const arrowRef = useRef<SVGSVGElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
 
-  const { refs, floatingStyles, context } = useFloating({
+  const { refs, floatingStyles, context, update } = useFloating({
     open: isOpen,
     onOpenChange: setIsOpen,
     middleware: [
@@ -81,8 +81,8 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     role,
   ]);
 
-  // Event delegation handler for grammar marks
-  const handleEditorPointerMove = useCallback((event: PointerEvent) => {
+    // Event delegation handler for grammar marks - optimized for performance
+  const handleEditorMouseOver = useCallback((event: MouseEvent) => {
     const target = event.target as HTMLElement;
     const suggestionId = target.dataset.suggestionId;
 
@@ -107,11 +107,11 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     }
   }, [getSuggestion, currentSuggestion?.id, refs]);
 
-  const handleEditorPointerLeave = useCallback((event: PointerEvent) => {
-    const target = event.target as HTMLElement;
+  const handleEditorMouseLeave = useCallback((event: MouseEvent) => {
+    const relatedTarget = event.relatedTarget as HTMLElement;
 
-    // Only close if we're leaving a suggestion element
-    if (target.dataset.suggestionId) {
+    // Only close if we're actually leaving the editor area (not moving to hover card)
+    if (!editorElement?.contains(relatedTarget)) {
       setHoverState('closing');
 
       // Clear opening timeout if it exists
@@ -126,24 +126,40 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
         setCurrentSuggestion(null);
       }, 100);
     }
-  }, []);
+  }, [editorElement]);
 
-  // Attach event delegation to editor element
+      // Attach event delegation to editor element with scroll handling
   useEffect(() => {
     if (!editorElement) return;
 
-    editorElement.addEventListener('pointermove', handleEditorPointerMove);
-    editorElement.addEventListener('pointerleave', handleEditorPointerLeave);
+    // Add event listeners
+    editorElement.addEventListener('mouseover', handleEditorMouseOver);
+    editorElement.addEventListener('mouseleave', handleEditorMouseLeave);
+
+    // Handle scroll to reposition hover card
+    const handleScroll = () => {
+      if (isOpen && update) {
+        update();
+      }
+    };
+
+    // Find scroll container (editor's parent or window)
+    const scrollContainer = editorElement.closest('[data-scroll-container]') ||
+                           editorElement.parentElement ||
+                           window;
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
-      editorElement.removeEventListener('pointermove', handleEditorPointerMove);
-      editorElement.removeEventListener('pointerleave', handleEditorPointerLeave);
+      editorElement.removeEventListener('mouseover', handleEditorMouseOver);
+      editorElement.removeEventListener('mouseleave', handleEditorMouseLeave);
+      scrollContainer.removeEventListener('scroll', handleScroll);
 
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [editorElement, handleEditorPointerMove, handleEditorPointerLeave]);
+  }, [editorElement, handleEditorMouseOver, handleEditorMouseLeave, isOpen, update]);
 
   // Handle keyboard navigation
   useEffect(() => {

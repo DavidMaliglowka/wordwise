@@ -16,6 +16,7 @@ const DocumentEditor: React.FC = () => {
   const { user } = useAuthContext();
   const editorRef = useRef<LexicalEditorRef>(null);
   const isApplyingSuggestion = useRef(false);
+  const isApplyingMarks = useRef(false);
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -102,6 +103,18 @@ const DocumentEditor: React.FC = () => {
     clearSuggestions();
   }, [clearSuggestions]);
 
+  // Handle mark application start
+  const handleMarkApplicationStart = useCallback(() => {
+    console.log('🔧 Mark application started - blocking grammar checks');
+    isApplyingMarks.current = true;
+  }, []);
+
+  // Handle mark application end
+  const handleMarkApplicationEnd = useCallback(() => {
+    console.log('🔧 Mark application ended - allowing grammar checks');
+    isApplyingMarks.current = false;
+  }, []);
+
   // Load document on mount
   useEffect(() => {
     const loadDocument = async () => {
@@ -159,8 +172,12 @@ const DocumentEditor: React.FC = () => {
     setEditorState(stateData);
     setHasUnsavedChanges(true);
 
-    // Skip grammar checking if we're currently applying a suggestion to prevent infinite loops
-    if (isApplyingSuggestion.current) {
+    // Skip grammar checking if we're currently applying a suggestion or marks to prevent infinite loops
+    if (isApplyingSuggestion.current || isApplyingMarks.current) {
+      console.log('⏸️ Skipping grammar check - applying changes:', {
+        isApplyingSuggestion: isApplyingSuggestion.current,
+        isApplyingMarks: isApplyingMarks.current
+      });
       return;
     }
 
@@ -499,6 +516,12 @@ const DocumentEditor: React.FC = () => {
                 autoSave={true}
                 autoSaveDelay={2000}
                 className="min-h-[500px] sm:min-h-[600px]"
+                grammarSuggestions={suggestions}
+                onGrammarSuggestionClick={handleApplySuggestion}
+                onApplyGrammarSuggestion={handleApplySuggestion}
+                onDismissGrammarSuggestion={handleDismissSuggestion}
+                onGrammarMarkApplicationStart={handleMarkApplicationStart}
+                onGrammarMarkApplicationEnd={handleMarkApplicationEnd}
               />
             </div>
           </div>
