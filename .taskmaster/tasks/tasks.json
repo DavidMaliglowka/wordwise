@@ -791,8 +791,8 @@
             "id": 6,
             "title": "Personal Dictionary System (IndexedDB Storage)",
             "description": "Implement user-added terms storage using IndexedDB for persistent custom vocabulary and domain-specific words.",
-            "details": "Create a personal dictionary system that:\n- Stores user-added terms in IndexedDB for persistence across sessions\n- Integrates with the client grammar engine to ignore custom terms\n- Provides UI for users to add/remove custom words and phrases\n- Handles domain-specific jargon and technical terms\n- Syncs personal dictionary with user account if authenticated\n- Prevents false positives for legitimate terms the user uses regularly\n<info added on 2025-06-20T20:34:49.716Z>\nInclude a note that Task 14.6 will focus exclusively on implementing the client-side IndexedDB storage mechanism to provide immediate, fast local access to the personal dictionary. Clearly specify that this system is designed to handle instant-term lookups and local persistence, while Task 12 manages the server-side component using Firestore for extended persistence and cross-device synchronization. Emphasize the integration between the two systems to create a cohesive personal dictionary strategy, where fast local checks via IndexedDB complement real-time sync and consistency via Firestore.\n</info added on 2025-06-20T20:34:49.716Z>",
-            "status": "pending",
+            "details": "Create a personal dictionary system that:\n- Stores user-added terms in IndexedDB for persistence across sessions\n- Integrates with the client grammar engine to ignore custom terms\n- Provides UI for users to add/remove custom words and phrases\n- Handles domain-specific jargon and technical terms\n- Syncs personal dictionary with user account if authenticated\n- Prevents false positives for legitimate terms the user uses regularly\n<info added on 2025-06-20T20:34:49.716Z>\nInclude a note that Task 14.6 will focus exclusively on implementing the client-side IndexedDB storage mechanism to provide immediate, fast local access to the personal dictionary. Clearly specify that this system is designed to handle instant-term lookups and local persistence, while Task 12 manages the server-side component using Firestore for extended persistence and cross-device synchronization. Emphasize the integration between the two systems to create a cohesive personal dictionary strategy, where fast local checks via IndexedDB complement real-time sync and consistency via Firestore.\n</info added on 2025-06-20T20:34:49.716Z>\n<info added on 2025-06-20T21:07:36.570Z>\nThe personal dictionary system is now fully implemented with a comprehensive IndexedDB service, in-memory caching for immediate lookup, complete CRUD operations with error handling, and robust integration with the grammar engine. The UI management component offers full support for adding, removing, categorizing, searching, and bulk operations on words, along with real-time statistics and test integration. This implementation accurately filters personal terms from grammar suggestions while preserving grammar and style checks. Import/export functionalities have been added to facilitate seamless integration with server-side synchronization managed in Task 12. Note that Task 14.6 will continue to refine the client-side IndexedDB storage mechanism to ensure instant local access, complementing the broader personal dictionary strategy that pairs quick local lookups with real-time cross-device synchronization via Firestore.\n</info added on 2025-06-20T21:07:36.570Z>",
+            "status": "done",
             "dependencies": [
               "14.2"
             ],
@@ -815,7 +815,7 @@
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-20T20:44:10.661Z",
+      "updated": "2025-06-20T21:11:30.839Z",
       "description": "Tasks for master context"
     }
   }

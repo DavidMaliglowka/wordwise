@@ -4,6 +4,8 @@ import { useGrammarCheck } from '../../hooks/useGrammarCheck';
 import { EditorSuggestion } from '../../types/grammar';
 import { GrammarService } from '../../services/grammar';
 import { HybridGrammarService } from '../../services/grammar-hybrid';
+import PersonalDictionaryManager from '../PersonalDictionaryManager';
+import { personalDictionary } from '../../services/personal-dictionary';
 
 interface TestResult {
   mode: 'Legacy' | 'Hybrid';
@@ -566,6 +568,87 @@ const GrammarIntegrationTest: React.FC = () => {
               <li>Test text includes common errors: spelling, grammar, and passive voice</li>
             </ul>
           </div>
+        </div>
+
+        {/* Personal Dictionary Test Section */}
+        <div className="mb-8 p-4 bg-green-50 border border-green-200 rounded-lg">
+          <h3 className="text-lg font-semibold text-green-800 mb-4">Personal Dictionary Integration Test</h3>
+
+          <div className="mb-4 p-3 bg-white rounded border">
+            <h4 className="font-medium text-gray-900 mb-2">Quick Test</h4>
+            <p className="text-sm text-gray-600 mb-3">
+              Add some misspelled words to your personal dictionary, then run the grammar test to see them filtered out.
+            </p>
+
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={async () => {
+                  try {
+                    await personalDictionary.addWord('sentance', { category: 'custom', notes: 'Test word for demo' });
+                    await personalDictionary.addWord('speling', { category: 'custom', notes: 'Test word for demo' });
+                    await personalDictionary.addWord('wordwise', { category: 'technical', notes: 'Our app name' });
+                    alert('Added test words: sentance, speling, wordwise');
+                  } catch (error) {
+                    alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                  }
+                }}
+                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm"
+              >
+                Add Test Words
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    await personalDictionary.removeWord('sentance');
+                    await personalDictionary.removeWord('speling');
+                    await personalDictionary.removeWord('wordwise');
+                    alert('Removed test words');
+                  } catch (error) {
+                    alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                  }
+                }}
+                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+              >
+                Remove Test Words
+              </button>
+
+              <button
+                onClick={async () => {
+                  const stats = await personalDictionary.getStats();
+                  alert(`Dictionary Stats:\n- Total words: ${stats.totalWords}\n- Cache size: ${personalDictionary.getCacheSize()}\n- Categories: ${Object.keys(stats.categories).join(', ')}`);
+                }}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+              >
+                Show Stats
+              </button>
+            </div>
+
+            <div className="text-xs text-gray-500">
+              <p><strong>Expected behavior:</strong></p>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>Before adding: "sentance" and "speling" should appear in hybrid suggestions</li>
+                <li>After adding: These words should be filtered out from spelling suggestions</li>
+                <li>Other grammar suggestions (passive voice, articles) should still appear</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Personal Dictionary Manager */}
+        <div className="mb-8">
+          <PersonalDictionaryManager />
+        </div>
+
+        {/* Comparison Test */}
+        <div className="mb-6">
+          <button
+            onClick={runTests}
+            disabled={isLoading}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium"
+          >
+            {isLoading ? 'Running Tests...' : 'Run Comparison Test'}
+          </button>
         </div>
       </div>
     </div>

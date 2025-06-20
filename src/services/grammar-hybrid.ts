@@ -10,6 +10,7 @@ import GraphemeSplitter from 'grapheme-splitter';
 import { nanoid } from 'nanoid';
 import { auth } from '../lib/firebase';
 import { getHunspellDict, type HunspellDict } from '../utils/spellLoader';
+import { personalDictionary } from './personal-dictionary';
 
 // retext-usage removed due to deprecation and internal errors
 
@@ -26,6 +27,7 @@ interface ClientSuggestion {
   replacement?: string;
   type: 'spelling' | 'grammar' | 'style' | 'passive';
   confidence: number;
+  flaggedText?: string;
 }
 
 interface ProcessingDecision {
@@ -306,7 +308,7 @@ export class ClientGrammarEngine {
       const processor = await this.getProcessor();
       const file = await processor.process(normalizedText);
 
-      return file.messages.map((message: any) => {
+      const suggestions = file.messages.map((message: any) => {
         // Extract position information from retext message
         // Based on debug results: retext uses 'place' property for positions
         let rawStart = 0;
@@ -314,70 +316,92 @@ export class ClientGrammarEngine {
 
         if (message.place?.start?.offset !== undefined) {
           rawStart = message.place.start.offset;
-          rawEnd = message.place.end?.offset ?? rawStart;
+          rawEnd = message.place.end?.offset || rawStart;
         } else if (message.location?.start?.offset !== undefined) {
-          // Fallback to location if place is not available
           rawStart = message.location.start.offset;
-          rawEnd = message.location.end?.offset ?? rawStart;
+          rawEnd = message.location.end?.offset || rawStart;
         } else if (message.position?.start?.offset !== undefined) {
-          // Alternative position format
           rawStart = message.position.start.offset;
-          rawEnd = message.position.end?.offset ?? rawStart;
+          rawEnd = message.position.end?.offset || rawStart;
         } else if (message.start !== undefined) {
-          // Direct start/end properties
           rawStart = message.start;
-          rawEnd = message.end ?? rawStart;
+          rawEnd = message.end || rawStart;
         }
 
         // Validate and correct positions using the position mapper
         const { start, end } = positionMapper.validateUtf16Range(rawStart, rawEnd);
 
-        // Get better suggestions for spelling errors
-        let replacement = undefined;
-        if (message.source === 'retext-spell' && this.spellChecker) {
-          const word = normalizedText.slice(start, end);
-          const suggestions = this.spellChecker.suggest(word, { max: 10 });
-          replacement = this.pickBestSuggestion(word, suggestions);
-        } else {
-          replacement = (message as any).expected?.[0] || undefined;
+        // Extract the actual text being flagged
+        const flaggedText = normalizedText.slice(start, end);
+
+        // Determine suggestion type and extract replacement
+        const isSpelling = message.source === 'retext-spell' || message.ruleId?.includes('spell');
+        const isPassive = message.source === 'retext-passive';
+        const isArticle = message.source === 'retext-indefinite-article';
+        const isRepeated = message.source === 'retext-repeated-words';
+
+        let replacement: string | undefined;
+        let confidence = 60; // Default confidence
+
+        if (isArticle && message.expected) {
+          replacement = Array.isArray(message.expected) ? message.expected[0] : message.expected;
+          confidence = 80;
+        } else if (isRepeated && message.expected) {
+          replacement = Array.isArray(message.expected) ? message.expected[0] : message.expected;
+        } else if (isSpelling && message.expected) {
+          const suggestions = Array.isArray(message.expected) ? message.expected : [message.expected];
+          replacement = this.pickBestSuggestion(flaggedText, suggestions);
         }
 
         return {
           id: nanoid(),
-          rule: message.ruleId || message.source || 'unknown',
+          rule: message.source || message.ruleId || 'unknown',
           message: message.reason || message.message || 'Grammar issue detected',
-          severity: this.mapSeverity(message.ruleId || message.source),
+          severity: isSpelling ? 'error' : (isPassive ? 'suggestion' : 'warning') as 'error' | 'warning' | 'suggestion',
           range: { start, end },
           replacement,
-          type: this.mapType(message.ruleId || message.source),
-          confidence: this.mapConfidence(message.ruleId || message.source)
+          type: isSpelling ? 'spelling' : (isPassive ? 'passive' : (isArticle ? 'grammar' : 'style')) as 'spelling' | 'grammar' | 'style' | 'passive',
+          confidence,
+          flaggedText // Include the flagged text for personal dictionary filtering
         };
       });
+
+      // Filter out suggestions for words in the personal dictionary
+      return this.filterPersonalDictionaryWords(suggestions);
+
     } catch (error) {
       console.error('Client grammar analysis failed:', error);
       return [];
     }
   }
 
-  private mapType(rule: string): 'spelling' | 'grammar' | 'style' | 'passive' {
-    if (rule.includes('spell')) return 'spelling';
-    if (rule.includes('passive')) return 'passive';
-    if (rule.includes('usage') || rule.includes('article')) return 'grammar';
-    if (rule.includes('repeated') || rule.includes('redundant')) return 'style';
-    return 'grammar';
-  }
+  // Filter out suggestions for words that exist in the user's personal dictionary
+  private async filterPersonalDictionaryWords(suggestions: ClientSuggestion[]): Promise<ClientSuggestion[]> {
+    // Initialize personal dictionary if not ready
+    if (!personalDictionary.isReady()) {
+      try {
+        await personalDictionary.initialize();
+      } catch (error) {
+        console.warn('Personal dictionary not available, skipping filter:', error);
+        return suggestions;
+      }
+    }
 
-  private mapSeverity(rule: string): 'error' | 'warning' | 'suggestion' {
-    if (rule.includes('spell')) return 'error';
-    if (rule.includes('usage') || rule.includes('article')) return 'warning';
-    return 'suggestion';
-  }
+    return suggestions.filter(suggestion => {
+      // Only filter spelling suggestions
+      if (suggestion.type !== 'spelling') {
+        return true;
+      }
 
-  private mapConfidence(rule: string): number {
-    if (rule.includes('spell')) return 0.9;
-    if (rule.includes('usage') || rule.includes('article')) return 0.8;
-    if (rule.includes('passive')) return 0.7;
-    return 0.6;
+      // Check if the flagged word is in the personal dictionary
+      const flaggedWord = (suggestion as any).flaggedText || '';
+      if (personalDictionary.hasWord(flaggedWord)) {
+        console.log(`Filtered out personal dictionary word: "${flaggedWord}"`);
+        return false;
+      }
+
+      return true;
+    });
   }
 }
 
