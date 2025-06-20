@@ -56,12 +56,26 @@ const DocumentEditor: React.FC = () => {
 
     // Handle applying a suggestion
   const handleApplySuggestion = useCallback((suggestion: EditorSuggestion) => {
+    console.log('🔧 APPLY DEBUG: Starting suggestion application', {
+      suggestionId: suggestion.id,
+      original: suggestion.original,
+      proposed: suggestion.proposed,
+      currentContentLength: editorState.content.length
+    });
+
     try {
       const result = applySuggestion(suggestion.id, editorState.content);
 
       if (result && editorRef.current) {
+        console.log('🔧 APPLY DEBUG: Suggestion applied successfully', {
+          oldTextLength: editorState.content.length,
+          newTextLength: result.newText.length,
+          textChanged: result.newText !== editorState.content
+        });
+
         // Set flag to prevent grammar checking during programmatic update
         isApplyingSuggestion.current = true;
+        console.log('🔧 APPLY DEBUG: Set isApplyingSuggestion flag to true');
 
         // Update the actual Lexical editor content
         editorRef.current.updateContent(result.newText);
@@ -79,24 +93,50 @@ const DocumentEditor: React.FC = () => {
         // Mark as having unsaved changes
         setHasUnsavedChanges(true);
 
-        // Reset flag but DON'T automatically recheck grammar
-        // This prevents lost suggestions and conflicting loops
-        // Grammar will be rechecked naturally when user types next
+        // Reset flag and trigger new grammar check after content is updated
         setTimeout(() => {
+          console.log('🔧 APPLY DEBUG: Resetting flag and triggering recheck');
           isApplyingSuggestion.current = false;
-        }, 100);
+
+          // Trigger a fresh grammar check to update marks for the new content
+          if (result.newText && result.newText.trim().length > 0) {
+            console.log('🔄 APPLY DEBUG: Triggering grammar recheck after suggestion application');
+            checkGrammar(result.newText);
+          } else {
+            console.log('🧹 APPLY DEBUG: Clearing suggestions - no content remaining');
+            clearSuggestions();
+          }
+        }, 200); // Increased delay to ensure editor is fully updated
+      } else {
+        console.error('🚨 APPLY DEBUG: Failed to apply suggestion or no editor ref', {
+          hasResult: !!result,
+          hasEditorRef: !!editorRef.current
+        });
       }
     } catch (error) {
-      console.error('Error in handleApplySuggestion:', error);
+      console.error('🚨 APPLY DEBUG: Error in handleApplySuggestion:', error);
       // Reset flag in case of error
       isApplyingSuggestion.current = false;
     }
-  }, [applySuggestion, editorState.content, checkGrammar]);
+  }, [applySuggestion, editorState.content, checkGrammar, clearSuggestions]);
 
   // Handle dismissing a suggestion
   const handleDismissSuggestion = useCallback((suggestionId: string) => {
     dismissSuggestion(suggestionId);
   }, [dismissSuggestion]);
+
+  // Handle clicking on a grammar mark (should NOT auto-apply)
+  const handleGrammarMarkClick = useCallback((suggestion: EditorSuggestion) => {
+    console.log('🖱️ CLICK DEBUG: DocumentEditor handleGrammarMarkClick called', {
+      suggestionId: suggestion.id,
+      suggestionText: suggestion.original,
+      suggestionProposed: suggestion.proposed
+    });
+
+    // Just log the click - don't auto-apply the suggestion
+    // The hover card should handle showing details and user can choose to apply
+    console.log('✅ CLICK DEBUG: Click handled - no auto-apply triggered');
+  }, []);
 
   // Handle clearing all suggestions
   const handleClearAllSuggestions = useCallback(() => {
@@ -146,16 +186,25 @@ const DocumentEditor: React.FC = () => {
         }
 
         setDocument(docData);
+        const content = docData.content || '';
         setEditorState({
-          content: docData.content || '',
-          html: docData.content || '',
+          content,
+          html: content,
           wordCount: 0,
-          characterCount: docData.content?.length || 0,
-          isEmpty: !docData.content || docData.content.trim().length === 0,
+          characterCount: content.length,
+          isEmpty: !content || content.trim().length === 0,
         });
 
         // Clear suggestions and reset grammar check cache when loading document
         clearSuggestions();
+
+        // Trigger initial grammar check if document has content
+        if (content && content.trim().length > 0) {
+          console.log('🚀 Triggering initial grammar check for loaded document');
+          setTimeout(() => {
+            checkGrammar(content);
+          }, 500); // Small delay to ensure editor is ready
+        }
       } catch (error) {
         console.error('Error loading document:', error);
         navigate('/dashboard');
@@ -165,7 +214,7 @@ const DocumentEditor: React.FC = () => {
     };
 
     loadDocument();
-  }, [id, user, navigate]);
+  }, [id, user, navigate, clearSuggestions, checkGrammar]);
 
     // Handle editor content changes
   const handleEditorChange = useCallback((stateData: EditorStateData) => {
@@ -517,7 +566,7 @@ const DocumentEditor: React.FC = () => {
                 autoSaveDelay={2000}
                 className="min-h-[500px] sm:min-h-[600px]"
                 grammarSuggestions={suggestions}
-                onGrammarSuggestionClick={handleApplySuggestion}
+                onGrammarSuggestionClick={handleGrammarMarkClick}
                 onApplyGrammarSuggestion={handleApplySuggestion}
                 onDismissGrammarSuggestion={handleDismissSuggestion}
                 onGrammarMarkApplicationStart={handleMarkApplicationStart}

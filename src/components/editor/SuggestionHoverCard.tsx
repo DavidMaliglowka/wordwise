@@ -58,11 +58,13 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
 
   const hover = useHover(context, {
     handleClose: safePolygon({
-      buffer: 4,
+      buffer: 12,
+      requireIntent: false,
+      blockPointerEvents: true,
     }),
     delay: {
-      open: 300,
-      close: 100,
+      open: 100,
+      close: 400,
     },
   });
 
@@ -86,9 +88,19 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     const target = event.target as HTMLElement;
     const suggestionId = target.dataset.suggestionId;
 
+    console.log('🖱️ HOVER DEBUG: MouseOver event', {
+      target: target.tagName,
+      suggestionId,
+      hasSuggestionType: target.hasAttribute('data-suggestion-type'),
+      currentSuggestion: currentSuggestion?.id,
+      hoverState
+    });
+
     if (suggestionId && target.hasAttribute('data-suggestion-type')) {
       const suggestion = getSuggestion(suggestionId);
       if (suggestion && suggestion.id !== currentSuggestion?.id) {
+        console.log('🎯 HOVER DEBUG: Triggering hover for suggestion', suggestion.id);
+
         // Clear any existing timeout
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
@@ -98,20 +110,29 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
         setCurrentSuggestion(suggestion);
         refs.setReference(target);
 
-        // Delay opening to prevent flicker
+        // Reduced delay for faster response
         timeoutRef.current = setTimeout(() => {
+          console.log('⏰ HOVER DEBUG: Opening hover card for', suggestion.id);
           setIsOpen(true);
           setHoverState('open');
-        }, 300);
+        }, 100); // Further reduced delay
       }
     }
-  }, [getSuggestion, currentSuggestion?.id, refs]);
+  }, [getSuggestion, currentSuggestion?.id, refs, hoverState]);
 
   const handleEditorMouseLeave = useCallback((event: MouseEvent) => {
     const relatedTarget = event.relatedTarget as HTMLElement;
 
+    console.log('🖱️ HOVER DEBUG: MouseLeave event', {
+      relatedTarget: relatedTarget?.tagName,
+      isInEditor: editorElement?.contains(relatedTarget),
+      hoverState,
+      currentSuggestion: currentSuggestion?.id
+    });
+
     // Only close if we're actually leaving the editor area (not moving to hover card)
     if (!editorElement?.contains(relatedTarget)) {
+      console.log('🔄 HOVER DEBUG: Starting close sequence');
       setHoverState('closing');
 
       // Clear opening timeout if it exists
@@ -119,14 +140,15 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
         clearTimeout(timeoutRef.current);
       }
 
-      // Delay closing to allow moving to hover card
+      // Increased delay for better stability
       timeoutRef.current = setTimeout(() => {
+        console.log('⏰ HOVER DEBUG: Closing hover card');
         setIsOpen(false);
         setHoverState('idle');
         setCurrentSuggestion(null);
-      }, 100);
+      }, 300); // Matching the close delay
     }
-  }, [editorElement]);
+  }, [editorElement, hoverState, currentSuggestion?.id]);
 
       // Attach event delegation to editor element with scroll handling
   useEffect(() => {

@@ -90,9 +90,26 @@ export function GrammarPlugin({
 
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
+      console.log('🖱️ CLICK DEBUG: Click event in GrammarPlugin', {
+        target: target.tagName,
+        suggestionId: target.dataset.suggestionId,
+        hasAttribute: target.hasAttribute('data-suggestion-type'),
+        dataset: target.dataset
+      });
+
       if (target.dataset.suggestionId) {
         const suggestion = suggestions.find(s => s.id === target.dataset.suggestionId);
         if (suggestion) {
+          console.log('🎯 CLICK DEBUG: Found suggestion, calling onSuggestionClick', {
+            suggestionId: suggestion.id,
+            suggestionText: suggestion.original,
+            onSuggestionClickExists: !!onSuggestionClick
+          });
+
+          // Prevent default click behavior
+          event.preventDefault();
+          event.stopPropagation();
+
           onSuggestionClick?.(suggestion);
         }
       }
@@ -139,7 +156,7 @@ function clearAllGrammarMarks(): void {
 
 // Helper function to apply a grammar mark for a suggestion
 function applyGrammarMark(suggestion: EditorSuggestion): void {
-  console.log(`📝 Applying grammar mark for suggestion:`, {
+  console.log(`📝 MARK DEBUG: Starting mark application for suggestion:`, {
     id: suggestion.id,
     type: suggestion.type,
     range: suggestion.range,
@@ -150,11 +167,20 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
   const root = $getRoot();
   const textContent = root.getTextContent();
 
+  console.log(`📝 MARK DEBUG: Current text content:`, {
+    length: textContent.length,
+    first100chars: textContent.substring(0, 100),
+    targetText: suggestion.original
+  });
+
   // Validate range
   if (suggestion.range.start < 0 ||
       suggestion.range.end > textContent.length ||
       suggestion.range.start >= suggestion.range.end) {
-    console.warn(`Invalid range for suggestion ${suggestion.id}:`, suggestion.range);
+    console.warn(`⚠️ MARK DEBUG: Invalid range for suggestion ${suggestion.id}:`, {
+      range: suggestion.range,
+      textLength: textContent.length
+    });
     return;
   }
 
@@ -164,13 +190,27 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
       const nodeText = node.getTextContent();
       const targetText = suggestion.original;
 
+      console.log(`🔍 MARK DEBUG: Checking text node:`, {
+        nodeText: nodeText.substring(0, 50) + (nodeText.length > 50 ? '...' : ''),
+        targetText,
+        nodeLength: nodeText.length
+      });
+
       // Simple text matching for now - look for the exact original text
       const textIndex = nodeText.indexOf(targetText);
       if (textIndex !== -1) {
+        console.log(`🎯 MARK DEBUG: Found target text at index ${textIndex}`);
+
         try {
           // Split the text node at the start and end of our target
           const beforeText = nodeText.substring(0, textIndex);
           const afterText = nodeText.substring(textIndex + targetText.length);
+
+          console.log(`✂️ MARK DEBUG: Splitting text:`, {
+            beforeText: beforeText.substring(Math.max(0, beforeText.length - 20)),
+            targetText,
+            afterText: afterText.substring(0, 20)
+          });
 
           // Create the mark node
           const markNode = $createGrammarMarkNode(
@@ -204,10 +244,10 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
             node.replace(markNode);
           }
 
-          console.log(`✅ Successfully applied mark for "${targetText}"`);
+          console.log(`✅ MARK DEBUG: Successfully applied mark for "${targetText}"`);
           return true;
         } catch (error) {
-          console.error(`Error applying mark for "${targetText}":`, error);
+          console.error(`🚨 MARK DEBUG: Error applying mark for "${targetText}":`, error);
           return false;
         }
       }
@@ -223,14 +263,18 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
           }
         }
       } catch (error) {
-        console.error('Error traversing children:', error);
+        console.error('🚨 MARK DEBUG: Error traversing children:', error);
       }
     }
 
     return false;
   }
 
-  findAndMarkText(root);
+  const success = findAndMarkText(root);
+  console.log(`📝 MARK DEBUG: Mark application result for "${suggestion.original}":`, {
+    success,
+    suggestionId: suggestion.id
+  });
 }
 
 // Helper function to remove a specific grammar mark

@@ -73,6 +73,12 @@ const GrammarIntegrationTest: React.FC = () => {
     dismissSuggestion(suggestionId);
   }, [dismissSuggestion]);
 
+  // Handle clicking on a grammar mark (should NOT auto-apply)
+  const handleGrammarMarkClick = useCallback((suggestion: EditorSuggestion) => {
+    console.log('🖱️ Test: Grammar mark clicked:', suggestion.id);
+    // Just log the click - don't auto-apply the suggestion
+  }, []);
+
   // Handle mark application coordination
   const handleMarkApplicationStart = useCallback(() => {
     console.log('🔧 Test: Mark application started');
@@ -201,6 +207,7 @@ const GrammarIntegrationTest: React.FC = () => {
             onChange={handleEditorChange}
             className="min-h-[300px] p-4"
             grammarSuggestions={suggestions}
+            onGrammarSuggestionClick={handleGrammarMarkClick}
             onApplyGrammarSuggestion={handleApplySuggestion}
             onDismissGrammarSuggestion={handleDismissSuggestion}
             onGrammarMarkApplicationStart={handleMarkApplicationStart}
