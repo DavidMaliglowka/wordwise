@@ -6,11 +6,9 @@ import {
   useRole,
   useInteractions,
   FloatingPortal,
-  FloatingArrow,
   offset,
   flip,
   shift,
-  arrow,
   safePolygon,
   autoUpdate,
 } from '@floating-ui/react';
@@ -27,9 +25,6 @@ interface SuggestionHoverCardProps {
   onDismissSuggestion?: (suggestionId: string) => void;
 }
 
-// Hover card state machine
-type HoverState = 'idle' | 'opening' | 'open' | 'closing';
-
 export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
   editorElement,
   getSuggestion,
@@ -38,173 +33,162 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentSuggestion, setCurrentSuggestion] = useState<EditorSuggestion | null>(null);
-  const [hoverState, setHoverState] = useState<HoverState>('idle');
-  const arrowRef = useRef<SVGSVGElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
 
   const { refs, floatingStyles, context, update } = useFloating({
     open: isOpen,
-    onOpenChange: setIsOpen,
+    onOpenChange: (open) => {
+      console.log('🎯 HOVER DEBUG: Floating UI onOpenChange:', { open, currentSuggestion: currentSuggestion?.id });
+      setIsOpen(open);
+      // When the card is closed by any interaction, clear the suggestion data
+      if (!open) {
+        setCurrentSuggestion(null);
+      }
+    },
+    // Set the preferred placement to 'bottom'
+    placement: 'bottom',
+    whileElementsMounted: autoUpdate,
     middleware: [
-      offset(8),
+      offset(10),
+      // Flip to the top if there isn't enough space below
       flip({
-        fallbackAxisSideDirection: 'start',
+        padding: 8,
+        fallbackPlacements: ['top'],
       }),
       shift({ padding: 8 }),
-      arrow({ element: arrowRef }),
     ],
-    whileElementsMounted: autoUpdate,
   });
 
+  // useHover hook handles the logic for opening and closing the card
   const hover = useHover(context, {
+    // safePolygon is the key to preventing premature closing.
+    // It creates a virtual polygon connecting the reference and floating elements.
     handleClose: safePolygon({
-      buffer: 12,
-      requireIntent: false,
-      blockPointerEvents: true,
+      requireIntent: false, // User must move towards the card
     }),
     delay: {
       open: 100,
-      close: 400,
+      close: 200,
     },
   });
 
-  const dismiss = useDismiss(context, {
-    escapeKey: true,
-    outsidePress: true,
-  });
+  // useDismiss handles closing the card on escape key or outside press
+  const dismiss = useDismiss(context);
 
-  const role = useRole(context, {
-    role: 'tooltip',
-  });
+  // useRole adds the appropriate ARIA role
+  const role = useRole(context, { role: 'tooltip' });
 
+  // Merge all interactions into props to be passed to the elements
   const { getReferenceProps, getFloatingProps } = useInteractions([
     hover,
     dismiss,
     role,
   ]);
 
-    // Event delegation handler for grammar marks - optimized for performance
-  const handleEditorMouseOver = useCallback((event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    const suggestionId = target.dataset.suggestionId;
-
-    console.log('🖱️ HOVER DEBUG: MouseOver event', {
-      target: target.tagName,
-      suggestionId,
-      hasSuggestionType: target.hasAttribute('data-suggestion-type'),
-      currentSuggestion: currentSuggestion?.id,
-      hoverState
-    });
-
-    if (suggestionId && target.hasAttribute('data-suggestion-type')) {
-      const suggestion = getSuggestion(suggestionId);
-      if (suggestion && suggestion.id !== currentSuggestion?.id) {
-        console.log('🎯 HOVER DEBUG: Triggering hover for suggestion', suggestion.id);
-
-        // Clear any existing timeout
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-
-        setHoverState('opening');
-        setCurrentSuggestion(suggestion);
-        refs.setReference(target);
-
-        // Reduced delay for faster response
-        timeoutRef.current = setTimeout(() => {
-          console.log('⏰ HOVER DEBUG: Opening hover card for', suggestion.id);
-          setIsOpen(true);
-          setHoverState('open');
-        }, 100); // Further reduced delay
-      }
-    }
-  }, [getSuggestion, currentSuggestion?.id, refs, hoverState]);
-
-  const handleEditorMouseLeave = useCallback((event: MouseEvent) => {
-    const relatedTarget = event.relatedTarget as HTMLElement;
-
-    console.log('🖱️ HOVER DEBUG: MouseLeave event', {
-      relatedTarget: relatedTarget?.tagName,
-      isInEditor: editorElement?.contains(relatedTarget),
-      hoverState,
-      currentSuggestion: currentSuggestion?.id
-    });
-
-    // Only close if we're actually leaving the editor area (not moving to hover card)
-    if (!editorElement?.contains(relatedTarget)) {
-      console.log('🔄 HOVER DEBUG: Starting close sequence');
-      setHoverState('closing');
-
-      // Clear opening timeout if it exists
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      // Increased delay for better stability
-      timeoutRef.current = setTimeout(() => {
-        console.log('⏰ HOVER DEBUG: Closing hover card');
-        setIsOpen(false);
-        setHoverState('idle');
-        setCurrentSuggestion(null);
-      }, 300); // Matching the close delay
-    }
-  }, [editorElement, hoverState, currentSuggestion?.id]);
-
-      // Attach event delegation to editor element with scroll handling
+  // Attach event delegation listeners to the editor element
   useEffect(() => {
     if (!editorElement) return;
 
-    // Add event listeners
-    editorElement.addEventListener('mouseover', handleEditorMouseOver);
-    editorElement.addEventListener('mouseleave', handleEditorMouseLeave);
+    // Get the event handlers from the useInteractions hook
+    const referenceProps = getReferenceProps();
+    const onMouseEnter = referenceProps.onMouseEnter as ((event: MouseEvent) => void) | undefined;
+    const onMouseLeave = referenceProps.onMouseLeave as ((event: MouseEvent) => void) | undefined;
 
-    // Handle scroll to reposition hover card
+    const handleMouseOver = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const suggestionId = target.dataset.suggestionId;
+
+      console.log('🖱️ HOVER DEBUG: MouseOver event (optimized)', {
+        target: target.tagName,
+        suggestionId,
+        hasSuggestionType: target.hasAttribute('data-suggestion-type'),
+      });
+
+      if (suggestionId && target.hasAttribute('data-suggestion-type')) {
+        const suggestion = getSuggestion(suggestionId);
+        if (suggestion) {
+          console.log('🎯 HOVER DEBUG: Setting reference and suggestion', {
+            suggestionId: suggestion.id,
+            targetElement: target.tagName
+          });
+
+          // Set the dynamic reference element for positioning
+          refs.setReference(target);
+          // Set the content for the card
+          setCurrentSuggestion(suggestion);
+          // Manually trigger the onMouseEnter handler from the useHover hook
+          onMouseEnter?.(event);
+        }
+      }
+    };
+
+    const handleMouseOut = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+
+      console.log('🖱️ HOVER DEBUG: MouseOut event (optimized)', {
+        target: target.tagName,
+        suggestionId: target.dataset.suggestionId,
+      });
+
+      // Only trigger leave if we are leaving a suggestion element
+      if (target.dataset.suggestionId) {
+        console.log('🔄 HOVER DEBUG: Triggering useHover onMouseLeave');
+        // Manually trigger the onMouseLeave handler from the useHover hook
+        onMouseLeave?.(event);
+      }
+    };
+
+    // Scroll listener to keep the card positioned correctly
     const handleScroll = () => {
-      if (isOpen && update) {
+      if (isOpen) {
+        console.log('📜 HOVER DEBUG: Scroll detected, updating position');
         update();
       }
     };
 
-    // Find scroll container (editor's parent or window)
     const scrollContainer = editorElement.closest('[data-scroll-container]') ||
                            editorElement.parentElement ||
                            window;
 
+    // Attach all listeners
+    editorElement.addEventListener('mouseover', handleMouseOver);
+    editorElement.addEventListener('mouseout', handleMouseOut);
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
 
-    return () => {
-      editorElement.removeEventListener('mouseover', handleEditorMouseOver);
-      editorElement.removeEventListener('mouseleave', handleEditorMouseLeave);
-      scrollContainer.removeEventListener('scroll', handleScroll);
+    console.log('🔧 HOVER DEBUG: Event listeners attached to editor element');
 
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+    return () => {
+      // Cleanup listeners
+      editorElement.removeEventListener('mouseover', handleMouseOver);
+      editorElement.removeEventListener('mouseout', handleMouseOut);
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      console.log('🧹 HOVER DEBUG: Event listeners cleaned up');
     };
-  }, [editorElement, handleEditorMouseOver, handleEditorMouseLeave, isOpen, update]);
+  }, [editorElement, getSuggestion, getReferenceProps, refs, update, isOpen]);
 
   // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isOpen || !currentSuggestion) return;
 
+      console.log('⌨️ HOVER DEBUG: Keyboard event', { key: event.key, suggestionId: currentSuggestion.id });
+
       switch (event.key) {
         case 'Enter':
         case ' ':
           event.preventDefault();
           if (onApplySuggestion) {
+            console.log('⌨️ HOVER DEBUG: Applying suggestion via keyboard');
             onApplySuggestion(currentSuggestion);
             setIsOpen(false);
-            setCurrentSuggestion(null);
           }
           break;
         case 'Delete':
         case 'Backspace':
           event.preventDefault();
           if (onDismissSuggestion) {
+            console.log('⌨️ HOVER DEBUG: Dismissing suggestion via keyboard');
             onDismissSuggestion(currentSuggestion.id);
             setIsOpen(false);
-            setCurrentSuggestion(null);
           }
           break;
       }
@@ -250,6 +234,8 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     return null;
   }
 
+  console.log('🎨 HOVER DEBUG: Rendering hover card for suggestion', currentSuggestion.id);
+
   return (
     <FloatingPortal>
       <div
@@ -259,17 +245,10 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
         className={`
           z-50 w-80 max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-lg
           ${getSuggestionTypeColor(currentSuggestion.type)}
-          animate-in fade-in-0 zoom-in-95 duration-200
         `}
         role="tooltip"
         aria-describedby="grammar-suggestion-content"
       >
-        <FloatingArrow
-          ref={arrowRef}
-          context={context}
-          className="fill-white stroke-gray-200"
-        />
-
         <div className="space-y-3">
           {/* Header */}
           <div className="flex items-start gap-2">
@@ -288,7 +267,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
             </div>
           </div>
 
-                    {/* Message */}
+          {/* Message */}
           <div id="grammar-suggestion-content" className="text-sm">
             <p className="text-gray-800 mb-2">{currentSuggestion.explanation}</p>
 
@@ -318,9 +297,9 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
             {currentSuggestion.proposed && onApplySuggestion && (
               <button
                 onClick={() => {
+                  console.log('🖱️ HOVER DEBUG: Apply button clicked');
                   onApplySuggestion(currentSuggestion);
                   setIsOpen(false);
-                  setCurrentSuggestion(null);
                 }}
                 className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
               >
@@ -330,9 +309,9 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
             {onDismissSuggestion && (
               <button
                 onClick={() => {
+                  console.log('🖱️ HOVER DEBUG: Dismiss button clicked');
                   onDismissSuggestion(currentSuggestion.id);
                   setIsOpen(false);
-                  setCurrentSuggestion(null);
                 }}
                 className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1"
               >
