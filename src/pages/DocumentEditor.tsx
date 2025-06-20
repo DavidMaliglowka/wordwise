@@ -60,8 +60,12 @@ const DocumentEditor: React.FC = () => {
       suggestionId: suggestion.id,
       original: suggestion.original,
       proposed: suggestion.proposed,
-      currentContentLength: editorState.content.length
+      currentContentLength: editorState.content.length,
+      timestamp: new Date().toISOString()
     });
+
+    // Add stack trace to see where this is being called from
+    console.trace('📍 APPLY DEBUG: Call stack for handleApplySuggestion');
 
     try {
       const result = applySuggestion(suggestion.id, editorState.content);
@@ -130,12 +134,16 @@ const DocumentEditor: React.FC = () => {
     console.log('🖱️ CLICK DEBUG: DocumentEditor handleGrammarMarkClick called', {
       suggestionId: suggestion.id,
       suggestionText: suggestion.original,
-      suggestionProposed: suggestion.proposed
+      suggestionProposed: suggestion.proposed,
+      timestamp: new Date().toISOString()
     });
 
     // Just log the click - don't auto-apply the suggestion
     // The hover card should handle showing details and user can choose to apply
     console.log('✅ CLICK DEBUG: Click handled - no auto-apply triggered');
+
+    // Add a stack trace to see where this is being called from
+    console.trace('📍 CLICK DEBUG: Call stack for handleGrammarMarkClick');
   }, []);
 
   // Handle clearing all suggestions

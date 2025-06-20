@@ -92,26 +92,42 @@ export function GrammarPlugin({
       const target = event.target as HTMLElement;
       console.log('🖱️ CLICK DEBUG: Click event in GrammarPlugin', {
         target: target.tagName,
+        className: target.className,
         suggestionId: target.dataset.suggestionId,
         hasAttribute: target.hasAttribute('data-suggestion-type'),
-        dataset: target.dataset
+        dataset: target.dataset,
+        eventType: event.type,
+        bubbles: event.bubbles,
+        cancelable: event.cancelable,
+        defaultPrevented: event.defaultPrevented
       });
 
       if (target.dataset.suggestionId) {
         const suggestion = suggestions.find(s => s.id === target.dataset.suggestionId);
         if (suggestion) {
-          console.log('🎯 CLICK DEBUG: Found suggestion, calling onSuggestionClick', {
+          console.log('🎯 CLICK DEBUG: Found suggestion, preventing default and calling onSuggestionClick', {
             suggestionId: suggestion.id,
             suggestionText: suggestion.original,
             onSuggestionClickExists: !!onSuggestionClick
           });
 
-          // Prevent default click behavior
+          // Prevent default click behavior FIRST
           event.preventDefault();
           event.stopPropagation();
 
+          console.log('🛑 CLICK DEBUG: Event prevented and stopped', {
+            defaultPrevented: event.defaultPrevented,
+            propagationStopped: event.cancelBubble
+          });
+
           onSuggestionClick?.(suggestion);
+
+          console.log('✅ CLICK DEBUG: onSuggestionClick called successfully');
+        } else {
+          console.log('❌ CLICK DEBUG: Suggestion not found for ID:', target.dataset.suggestionId);
         }
+      } else {
+        console.log('ℹ️ CLICK DEBUG: No suggestion ID found on clicked element');
       }
     };
 
@@ -132,11 +148,38 @@ export function GrammarPlugin({
 
 // Helper function to clear all grammar marks
 function clearAllGrammarMarks(): void {
+  console.log('🧹 CLEAR DEBUG: Starting to clear all grammar marks');
   const root = $getRoot();
 
   function traverseAndClear(node: any): void {
     if ($isGrammarMarkNode(node)) {
-      node.remove();
+      console.log('🎯 CLEAR DEBUG: Found grammar mark node to unwrap:', {
+        suggestionId: node.getSuggestionId(),
+        suggestionType: node.getSuggestionType()
+      });
+
+      try {
+        // Get the text content from the mark node before removing it
+        const textContent = node.getTextContent();
+        console.log('📝 CLEAR DEBUG: Extracting text content:', textContent);
+
+        if (textContent) {
+          // Create a new text node with the content
+          const textNode = $createTextNode(textContent);
+
+          // Replace the mark node with the plain text node
+          node.replace(textNode);
+          console.log('✅ CLEAR DEBUG: Successfully unwrapped mark node');
+        } else {
+          // If no text content, just remove the empty mark
+          node.remove();
+          console.log('🗑️ CLEAR DEBUG: Removed empty mark node');
+        }
+      } catch (error) {
+        console.error('🚨 CLEAR DEBUG: Error unwrapping mark node:', error);
+        // Fallback to just removing the node if unwrapping fails
+        node.remove();
+      }
       return;
     }
 
@@ -152,6 +195,7 @@ function clearAllGrammarMarks(): void {
   }
 
   traverseAndClear(root);
+  console.log('🧹 CLEAR DEBUG: Finished clearing all grammar marks');
 }
 
 // Helper function to apply a grammar mark for a suggestion
