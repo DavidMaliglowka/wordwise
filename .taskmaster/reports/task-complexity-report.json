@@ -1,12 +1,12 @@
 {
 	"meta": {
-		"generatedAt": "2025-06-16T20:03:11.280Z",
-		"tasksAnalyzed": 12,
-		"totalTasks": 13,
-		"analysisCount": 12,
-		"thresholdScore": 5,
+		"generatedAt": "2025-06-20T02:30:49.713Z",
+		"tasksAnalyzed": 7,
+		"totalTasks": 14,
+		"analysisCount": 13,
+		"thresholdScore": 7,
 		"projectName": "Taskmaster",
-		"usedResearch": true
+		"usedResearch": false
 	},
 	"complexityAnalysis": [
 		{
@@ -60,50 +60,58 @@
 		{
 			"taskId": 8,
 			"taskTitle": "Integrate Real-time Grammar/Spell Suggestions in Editor",
-			"complexityScore": 8,
+			"complexityScore": 9,
 			"recommendedSubtasks": 5,
-			"expansionPrompt": "Break down the task into subtasks for integrating real-time grammar and spell suggestions into the rich-text editor. Include tasks for debouncing user input, calling the AI endpoint, parsing suggestions, and implementing custom marks and hover cards with keyboard accessibility.",
-			"reasoning": "This integration builds on complex backend services and requires real-time UI updates with dynamic highlights and interactive components."
+			"expansionPrompt": "Break down this task into subtasks covering: integration of the grammar API with debounced input handling, parsing and categorizing suggestion data, building the right sidebar UI for grouped suggestions, implementing custom text highlighting within the editor, and developing interactive hover cards with accessibility features.",
+			"reasoning": "This task involves deep integration of real-time API calls, sophisticated UI changes for both the editor and sidebar, error handling, and ensuring keyboard accessibility, making it highly complex."
 		},
 		{
 			"taskId": 9,
 			"taskTitle": "Implement Live Metrics Panel",
-			"complexityScore": 5,
+			"complexityScore": 6,
 			"recommendedSubtasks": 3,
-			"expansionPrompt": "List the subtasks for developing the Live Metrics Panel, including designing the UI in the right sidebar, implementing logic to calculate word count, estimated reading time, and Flesch-Kincaid grade in real-time, and ensuring proper layout positioning for the footer.",
-			"reasoning": "While the calculations and UI updates are straightforward, real-time updating adds a moderate level of complexity in ensuring accuracy and responsiveness."
+			"expansionPrompt": "Expand this task into designing the UI components, developing algorithms for real-time word count, reading time, and Flesch-Kincaid grade calculations, and integrating the metrics logic with the live editor updates.",
+			"reasoning": "While the task requires real-time calculations and precise UI placement, the scope is more straightforward compared to deep integrations, making it moderately complex."
 		},
 		{
 			"taskId": 10,
 			"taskTitle": "Develop Passive Voice Detection AI Endpoint",
 			"complexityScore": 7,
 			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand the task by identifying steps for developing a Cloud Function that detects passive voice using GPT-4o, crafting a prompt specific to passive voice detection, implementing structured response formatting and integrating caching mechanisms similar to the grammar check endpoint.",
-			"reasoning": "This task is similar to the grammar check endpoint but requires distinct prompt engineering and response handling for passive voice, increasing its overall complexity."
+			"expansionPrompt": "Decompose this task into defining technical architecture and requirements, crafting a detailed GPT-4o prompt for passive voice detection, implementing the Cloud Function for processing and formatting responses, and integrating a caching mechanism similar to the grammar endpoint.",
+			"reasoning": "Developing an AI endpoint with precise prompt engineering, cloud function implementation, and integration of caching adds moderate to high complexity."
 		},
 		{
 			"taskId": 11,
 			"taskTitle": "Integrate Passive Voice Suggestions in Editor",
-			"complexityScore": 7,
+			"complexityScore": 8,
 			"recommendedSubtasks": 4,
-			"expansionPrompt": "Break down the tasks for integrating passive voice suggestions into the rich-text editor, including extending existing logic to handle passive voice responses, applying distinct highlighting, and implementing hover cards and keyboard navigation for user interaction.",
-			"reasoning": "This task extends existing editor integrations with another layer of suggestion handling, requiring careful design to ensure both grammar/spell and passive voice suggestions function seamlessly together."
+			"expansionPrompt": "Split this task into analyzing and documenting current editor integration points, extending the suggestion logic to include passive voice detection, implementing distinct visual highlighting for passive suggestions, and developing hover cards with keyboard navigation for accessibility.",
+			"reasoning": "This task requires synchronizing new passive voice features with existing grammar integration, while maintaining UI consistency and accessibility standards, which increases its complexity."
 		},
 		{
 			"taskId": 12,
 			"taskTitle": "Implement Personal Dictionary",
-			"complexityScore": 6,
+			"complexityScore": 7,
 			"recommendedSubtasks": 4,
-			"expansionPrompt": "Detail the steps required to implement a personal dictionary, including updating Firestore user documents to include dictionary fields, creating Cloud Functions for CRUD operations on dictionary terms, building the UI for dictionary management, and integrating dictionary check logic into grammar and passive voice endpoints.",
-			"reasoning": "The task involves backend modifications, frontend UI design, and integration with AI endpoints to filter suggestions, all of which add a moderate level of complexity."
+			"expansionPrompt": "Break this task into updating Firestore user documents, creating Cloud Functions for CRUD operations on dictionary terms, designing the UI for dictionary management, and integrating dictionary check logic into existing grammar and passive voice endpoints.",
+			"reasoning": "Adding both backend and frontend components, along with integration into existing systems to filter suggestions based on user preferences, contributes to a moderate level of complexity."
 		},
 		{
 			"taskId": 13,
 			"taskTitle": "Setup GitHub Actions CI/CD",
 			"complexityScore": 5,
 			"recommendedSubtasks": 4,
-			"expansionPrompt": "Expand this task by outlining the steps for setting up a GitHub Actions workflow, including jobs for linting, building, and testing, configuring triggers for push and pull request events, setting up caching for node modules, and verifying the workflow through test cases.",
-			"reasoning": "Setting up a CI/CD pipeline involves several configuration steps and integration with different testing and build processes, moderately increasing its overall complexity."
+			"expansionPrompt": "Expand the task by setting up the workflow file structure, configuring separate jobs for linting, building, and testing, defining trigger events and caching strategies, and verifying that the CI/CD pipeline functions correctly through test runs.",
+			"reasoning": "While the CI/CD pipeline requires careful configuration, it follows established procedures and best practices, making it a moderately straightforward but essential task."
+		},
+		{
+			"taskId": 14,
+			"taskTitle": "Optimize Grammar Checker Performance",
+			"complexityScore": 10,
+			"recommendedSubtasks": 8,
+			"expansionPrompt": "Divide this task into subtasks that include: implementing a client-side baseline grammar engine with unified/retext/nspell, fixing Unicode and error position mapping, overhauling the caching mechanism, resolving race conditions and infinite loops, adding multi-language support and confidence tuning, developing a hybrid routing decision engine for dynamic model usage, integrating Web Workers and text chunking for performance, and performing comprehensive testing across the system.",
+			"reasoning": "This overhaul affects multiple layers of the system—from client-side processing to advanced backend logic—and involves complex performance optimizations, concurrency controls, and cross-module integrations, thus rating the highest in complexity."
 		}
 	]
 }

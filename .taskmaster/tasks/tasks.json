@@ -392,81 +392,41 @@
         "subtasks": [
           {
             "id": 1,
-            "title": "Review Existing Services and Editor Structure",
-            "description": "Analyze the current implementation of GrammarService and useGrammarCheck hook, and study DocumentEditor.tsx to identify integration points.",
+            "title": "Lexical Editor Custom Mark System",
+            "description": "Develop and integrate custom mark nodes within the lexical editor for text highlighting and custom mark behavior.",
             "dependencies": [],
-            "details": "Examine GrammarTestPage usage and determine how the grammar functionalities can be migrated to DocumentEditor.tsx.\n<info added on 2025-06-17T17:12:33.335Z>\nAnalysis complete. The existing grammar services, hooks, and debouncing implementations have been thoroughly reviewed and confirmed to be production-ready. The plan for integrating useGrammarCheck into DocumentEditor includes importing the hook into DocumentEditor.tsx, connecting editor change events to the grammar service, and managing suggestion state in parallel with document state. Additionally, a dedicated grammar suggestion sidebar component will be created along with visual highlighting in the Lexical theme. Interactive controls such as hover cards for applying or dismissing suggestions are also planned. This integration strategy leverages the robust functionality proven in GrammarTestPage while aligning with DocumentEditor's current architecture and auto-save features.\n</info added on 2025-06-17T17:12:33.335Z>",
-            "status": "done"
-          },
-          {
-            "id": 2,
-            "title": "Integrate useGrammarCheck into DocumentEditor",
-            "description": "Embed the useGrammarCheck hook within DocumentEditor.tsx to enable grammar checking functionality.",
-            "dependencies": [
-              1
-            ],
-            "details": "Refactor DocumentEditor.tsx to call useGrammarCheck in appropriate lifecycle events, ensuring compatibility with existing editor features.\n<info added on 2025-06-17T17:14:49.332Z>\nIntegration complete. The DocumentEditor now imports useGrammarCheck and EditorSuggestion, integrating the hook with a 1000ms debounce delay, a 3-character minimum threshold, grammar and spelling enabled (with style disabled), and caching for performance. The handleEditorChange function has been updated to trigger grammar checks on content changes and to clear suggestions when the content is empty, all while preserving the existing auto-save functionality. Additionally, a real-time grammar status display has been added to the document stats header with color-coded statuses (blue: checking, amber: suggestions, green: ok), along with an error display component featuring retry functionality and robust error handling for authentication and API failures. Grammar suggestions are now managed alongside the document state with proper cleanup and error recovery measures. Ready for the next phase: Reviewing the debouncing implementation.\n</info added on 2025-06-17T17:14:49.332Z>",
-            "status": "done"
-          },
-          {
-            "id": 3,
-            "title": "Implement Input Debouncing",
-            "description": "Add a debounce mechanism for user input to avoid excessive calls to the grammar endpoint.",
-            "dependencies": [
-              2
-            ],
-            "details": "Use a debounce function to delay grammar checks until the user has paused typing, balancing performance and responsiveness.\n<info added on 2025-06-17T17:10:59.314Z>\nReview the existing debouncing hooks (useDebounce.ts and useGrammarDebounce) and integrate them into the DocumentEditor. The review should ensure these hooks are properly utilized, including their generic support with TypeScript, 1000ms delay in useGrammarDebounce, a minimum character threshold of 3, smart text change detection to prevent duplicate API calls, advanced controls for trigger, cancel, flush, and isActive, and automatic cleanup for memory management.\n</info added on 2025-06-17T17:10:59.314Z>\n<info added on 2025-06-17T17:16:27.845Z>\nDebouncing implementation review complete. The integration in DocumentEditor via useGrammarCheck and useGrammarDebounce has been verified with the following key points: a 1000ms delay and a minimum input length of 3 characters; smart duplicate detection that prevents redundant API calls; advanced control methods (trigger, cancel, flush, isActive) that ensure robust timeout management and memory cleanup; effective race condition mitigation using request ID tracking and AbortController; and performance optimizations including client-side caching with a 5-minute TTL. All aspects confirm that the debouncing flow is production-ready and optimally configured, allowing us to move forward to the GrammarService endpoint verification.\n</info added on 2025-06-17T17:16:27.845Z>",
-            "status": "done"
-          },
-          {
-            "id": 4,
-            "title": "Setup GrammarService Endpoint Calls",
-            "description": "Integrate calls to the GrammarService endpoint inside DocumentEditor.tsx after debouncing the input.",
-            "dependencies": [
-              3
-            ],
-            "details": "Ensure that the AI endpoint is triggered correctly, handling asynchronous requests and potential errors efficiently.\n<info added on 2025-06-17T17:24:23.495Z>\nGrammarService endpoint integration has been fully verified. The endpoint is correctly configured with the URL, POST method, and proper JSON payload including text, language, and flags, along with secure Firebase authentication and CORS settings for local development. Request handling is robust with validated payloads, length limits, client-side caching (5-minute TTL), and comprehensive error handling for various cases (401, 429, 5xx). The DocumentEditor’s integration via the useGrammarCheck hook demonstrates effective debouncing (1000ms delay), race condition prevention with unique request IDs and AbortController, and proper state management for loading, errors, and suggestions. Additionally, the retry mechanism and clear user feedback on errors confirm a production-ready integration.\n</info added on 2025-06-17T17:24:23.495Z>",
-            "status": "done"
-          },
-          {
-            "id": 5,
-            "title": "Parse and Map Grammar Suggestions",
-            "description": "Develop logic to parse the responses from GrammarService and map them to appropriate editor markings.",
-            "dependencies": [
-              4
-            ],
-            "details": "Extract suggestion data, categorize suggestions, and integrate the parsing mechanism to convert responses into custom visual marks in the Lexical editor.\n<info added on 2025-06-17T17:27:25.648Z>\nImplemented comprehensive enhancement of the suggestion parsing and mapping mechanism. Enhanced the type system by introducing GrammarCategory and CategorizedSuggestions types, supporting categories such as correctness, clarity, engagement, and delivery, and added optional severity levels (low, medium, high). Developed smart categorization logic that maps suggestions based on type, confidence scores, and context analysis—with rules assigning Grammar and Spelling to correctness, punctuation to either correctness or clarity, and style to delivery, engagement, or clarity, defaulting to clarity for unknown types. Upgraded the service layer with an intelligent _categorizeSuggestion() method and integrated these updates via createEditorSuggestions() and a new categorizeSuggestions() utility for UI grouping. Also integrated categorizedSuggestions into DocumentEditor for real-time state updates, enhancing the UI with category-specific counts, color-coded status bars, and visual badges for error or clarity. These improvements ensure efficient, memoized categorization, setting a robust foundation for the upcoming sidebar UI development.\n</info added on 2025-06-17T17:27:25.648Z>",
-            "status": "done"
-          },
-          {
-            "id": 6,
-            "title": "Develop Right Sidebar UI for Suggestions",
-            "description": "Design and implement a right sidebar to display categorized suggestions (Correctness, Clarity, Engagement, Delivery).",
-            "dependencies": [
-              5
-            ],
-            "details": "Create UI components that list suggestions, integrate state management to sync with the editor, and provide a clear categorization of grammar issues.\n<info added on 2025-06-17T17:32:54.757Z>\nAdded comprehensive RIGHT SIDEBAR implementation details: The GrammarSidebar component now features four collapsible, color-coded sections—Correctness, Clarity, Engagement, and Delivery—with dedicated icons and descriptions. Each suggestion is displayed with original and proposed text, detailed explanations, confidence scores, and color-coded type badges for grammar, spelling, punctuation, and style. The component also includes visually appealing empty states (\"Great writing!\") and spinner animations during grammar checks. Integration with the DocumentEditor has been enhanced using a flexbox layout with a fixed 320px sidebar, incorporating event handlers for applying, dismissing, and clearing suggestions, ensuring real-time state synchronization. Additional UI enhancements include category counts in the header, critical error badges, expandable categories, confidence indicators, positional text range details for suggestions, and accessible one-click actions with hover feedback.\n</info added on 2025-06-17T17:32:54.757Z>\n<info added on 2025-06-17T17:53:15.970Z>\nFixed the issue where accepted grammar suggestions only updated the sidebar state without modifying the actual Lexical editor content. The update ensures that handleApplySuggestion now calls editorRef.current.updateContent to trigger a re-render of the editor with the new text. This was accomplished by extending the LexicalEditor component with a LexicalEditorRef interface and implementing the UpdateContentPlugin using forwardRef and a timestamp-based trigger to force content refresh via Lexical’s $getRoot() API. These changes restore proper state synchronization between the React state and the Lexical editor’s internal state, ensuring that accepted changes (e.g., \"do es\" to \"do does\") are accurately reflected in the editor content.\n</info added on 2025-06-17T17:53:15.970Z>\n<info added on 2025-06-17T17:57:46.271Z>\nCritical Fix: Resolved infinite loop issue when accepting suggestions. Previously, handleApplySuggestion triggered updateContent, which in turn caused the editor's onChange event to run checkGrammar repeatedly, leading to an infinite loop. The solution now introduces an isApplyingSuggestion flag (using useRef) to bypass grammar checks during programmatic content updates. handleApplySuggestion sets this flag to true before updating the editor and resets it to false after a 500ms delay, while handleEditorChange now exits early if the flag is active. This update prevents the infinite loop, ensuring smooth suggestion application and consistent grammar rechecking without impacting performance.\n</info added on 2025-06-17T17:57:46.271Z>\n<info added on 2025-06-17T18:10:50.119Z>\nDEBUGGING: Added comprehensive logging to track execution in the suggestion application process. In handleApplySuggestion, logs now capture entry into the function, details of the received suggestion, results of applySuggestion, the progress of updating the editor content, state updates, flag management, and error handling with flag resets. The applySuggestion hook now logs input parameters, available suggestions, GrammarService method calls and outcomes, position corrections, and potential error conditions. Additionally, handleEditorChange includes logs for tracking content modifications, monitoring the isApplyingSuggestion flag status, and distinguishing between triggering or skipping grammar checks. These logs will help identify whether the freeze is due to an infinite loop between editor changes and grammar checks, issues in the GrammarService.applyTextSuggestion method, conflicts with Lexical's updateContent, or excessive React state updates.\n</info added on 2025-06-17T18:10:50.119Z>\n<info added on 2025-06-17T18:17:52.508Z>\nInfinite Loop fix applied: The UpdateContentPlugin now calls editor.update(callback, { discrete: true }), which prevents triggering the OnChangePlugin during programmatic updates. The grammar recheck timeout has been reduced from 1000ms to 100ms, and all debugging logs have been removed for production. This update ensures that the suggestion application mechanism updates the editor content immediately without causing repeated change events, maintaining correct grammar rechecking behavior.\n</info added on 2025-06-17T18:17:52.508Z>\n<info added on 2025-06-17T18:29:55.811Z>\nImplemented fix for text replacement and suggestion preservation issues. The applyTextSuggestion method now ignores the unreliable word boundary regex and directly uses the suggestion's position range to extract and replace the exact text span, ensuring that the full erroneous segment (e.g., \"do es\") is replaced with \"does.\" Additionally, the updateSuggestionsAfterChange function has been refined to remove suggestions only when there is more than 50% overlap with the applied change, with smart adjustments for partially overlapping suggestions. This approach preserves other suggestions that do not significantly conflict, such as punctuation errors. Next, testing will verify the correct behavior of both text replacement and suggestion preservation.\n</info added on 2025-06-17T18:29:55.811Z>\n<info added on 2025-06-17T18:46:17.285Z>\nCRITICAL FIX IMPLEMENTED: Text Replacement Issues Resolved\n\nRoot Cause Analysis:\n- Identified position drift where subsequent suggestions retained original positions after the first replacement.\n- Complex offset calculations were causing mismatches.\n- Noticed text mismatches, such as \"do does\" replacing an incorrect text segment.\n\nSolution Implemented:\nA complete rewrite of the applyTextSuggestion logic now utilizes a content-based search approach. The method initially attempts to use the original positions; if a text mismatch is detected, it falls back to using indexOf() to locate the exact text. If still unsuccessful, a fuzzy search within a ±20 character range is employed. This change eliminates position drift issues, simplifies the hook logic by removing unnecessary applied suggestions tracking and offset updates, and ensures that once a suggestion is applied, it is simply removed from the list.\n\nEnhanced Debugging:\nComprehensive logging has been added to capture details about position detection, fallback search usage, and before/after text comparisons to further monitor and verify the correct behavior during suggestion application.\n\nExpected Results:\n- Correctly replacing \"do es\" with \"does\" by accurately finding and replacing the text segment.\n- Proper replacement for punctuation cases, such as \". .\" to \".\".\n- Sidebar retains only non-conflicting suggestions.\n- No longer encountering issues like \"doeses\" or mismatched character placements.\n\nTechnical Implementation:\nGrammarService.applyTextSuggestion now leverages a content-based search strategy, and useGrammarCheck.applySuggestion has been simplified to remove complex position tracking while ensuring that applied suggestions are directly removed from the list.\n</info added on 2025-06-17T18:46:17.285Z>\n<info added on 2025-06-17T19:14:15.961Z>\nCOMPREHENSIVE FIXES IMPLEMENTED: Resolved Lost Suggestions, Conflicting Loops, and Description Mismatches.\n\nIssues Addressed:\n1. Lost Suggestions Problem – Removed the automatic call to checkGrammar in handleApplySuggestion to ensure that remaining valid suggestions persist until the user types naturally.\n2. Conflicting Suggestions Loop – Enhanced the OpenAI prompt with explicit consistency rules and context-aware punctuation guidelines (e.g., handling interrogative words) to prevent contradictory suggestions.\n3. Description/Suggestion Mismatch – Implemented validation functions (_validateExplanation and _generateCorrectExplanation) to auto-correct mismatches between the suggested changes and their explanations, ensuring accurate descriptions for changes such as capitalization and punctuation.\n\nTechnical Improvements:\n• DocumentEditor now delays grammar rechecks until user typing resumes, preventing immediate clearing of suggestions.\n• OpenAI prompt enhancements enforce clear, consistent punctuation and descriptive guidelines.\n• GrammarService validation now automatically corrects explanation discrepancies during suggestion parsing.\n• All debug console logs have been removed for cleaner, production-level code.\n\nExpected results:\n• Persistent suggestions after application.\n• Consistent, non-contradictory grammar suggestions.\n• Accurate, reliable description of changes, mirroring the functionality of professional tools.\n</info added on 2025-06-17T19:14:15.961Z>\n<info added on 2025-06-17T19:57:23.714Z>\nMAJOR OPENAI REFACTOR IMPLEMENTED: Function-Calling, Zod Validation, and Deterministic Settings\n\n• Replaced fragile JSON parsing with OpenAI’s structured function-calling to enforce a precise schema (grammarCheckerTool), ensuring responses always match the expected structure.\n• Set deterministic settings (temperature: 0, top_p: 0, seed: 42) to guarantee consistent output and prevent conflicting suggestions.\n• Introduced Zod runtime validation via suggestionSchema and toolResponseSchema, including extra checks (e.g., range.end > range.start) to catch schema drift before issues arise.\n• Enhanced error handling by importing APIError from OpenAI for structured, status code-specific error logging, improving debugging clarity.\n• Updated streaming functionality to integrate with the new function-calling interface, accumulating tool call arguments incrementally while retaining backward compatibility.\n• Adapted the system prompt and tool schema to maintain domain-specific rules and consistency, preserving core grammar-checking logic while eliminating previous JSON parsing complications.\n\nExpected benefits include elimination of parsing errors, fully deterministic and reliable suggestions, improved type safety, and cleaner, more maintainable code.\n</info added on 2025-06-17T19:57:23.714Z>\n<info added on 2025-06-17T20:01:41.665Z>\nUNICODE ENCODING FIX: Resolved btoa() Latin1 Range Error. The issue arose when text containing Unicode characters (such as smart quotes) caused the grammar checker to fail with an error from btoa due to characters outside the Latin1 range. The root cause was identified in GrammarCache.generateKey(), which used btoa(key) directly without proper handling for Unicode. This has been resolved by enhancing generateKey() to apply the btoa(unescape(encodeURIComponent(key))) pattern for robust Unicode handling. Additionally, a fallback mechanism replaces non-alphanumeric characters with underscores if encoding fails, ensuring the caching mechanism remains functional regardless of input text.\n</info added on 2025-06-17T20:01:41.665Z>\n<info added on 2025-06-17T20:10:38.493Z>\nFIREBASE FUNCTION DEPLOYMENT COMPLETED: OpenAI Improvements Now Live. All Firebase functions have been successfully deployed with the updated checkGrammar function, incorporating our major OpenAI enhancements. This deployment introduces a function-calling interface to eliminate JSON parsing errors, deterministic settings (temperature: 0, top_p: 0, seed: 42) for consistent suggestions, Zod runtime validation for type-safe parsing with detailed error logging, enhanced error handling for clearer debugging, and comprehensive Unicode support to resolve previous btoa() encoding issues. The improvements address lost suggestions preservation, prevention of conflicting suggestion loops, and correction of description mismatches. Next, the grammar checker should be tested with problematic Unicode text (e.g., smart quotes) to verify that all issues have been resolved.\n</info added on 2025-06-17T20:10:38.493Z>\n<info added on 2025-06-17T20:32:57.391Z>\nImplemented robust text normalization within useGrammarCheck to pre-process pasted and loaded text. The updated function normalizes Unicode, converts smart quotes and apostrophes to their regular forms, replaces em/en dashes with hyphens, substitutes non-breaking and other exotic whitespace characters with standard spaces, and consolidates multiple spaces into one before triggering grammar checks. Additionally, comprehensive debug logging now captures the original versus normalized text, character code details, text length comparisons, and content extraction data from the Lexical editor. These improvements address issues with pasted text, loaded documents, and AI-generated large text blocks, ensuring consistent grammar processing across all input sources.\n</info added on 2025-06-17T20:32:57.391Z>\n<info added on 2025-06-17T20:51:04.204Z>\nCRITICAL ISSUE IDENTIFIED: OpenAI Token Limit Causing JSON Truncation. The grammar service response was truncated due to the max_tokens setting of 1000, despite detecting 18+ grammar errors. The limit has now been increased to 4000, and error handling has been enhanced along with added cache clearing routines. However, deployment is currently blocked by a Google Cloud quota issue; as a temporary workaround, caching has been disabled to bypass cached empty results.\n</info added on 2025-06-17T20:51:04.204Z>\n<info added on 2025-06-17T22:43:31.690Z>\nCRITICAL POSITION MISMATCH ISSUE RESOLVED: Fixed the placement/insertion bug where grammar suggestions were applied to incorrect character positions.\n\nRoot Cause Analysis:\n• Inaccurate character positions returned by OpenAI were causing suggestions to be applied to unintended text segments (e.g., capitalizing the \"w\" or \"i\" in the wrong context).\n\nComprehensive Solution Implemented:\n1. Enhanced OpenAI Prompt (functions/src/utils/openai.ts):\n   • Added explicit character position calculation instructions with detailed examples and exact counting methodology.\n   • Updated tool definitions to enforce precise position requirements, including warnings about zero-indexing and enforcing substring verification.\n2. Server-Side Validation:\n   • Integrated parseToolResponse checks to ensure positions match the actual text.\n   • Implemented auto-correction using an indexOf search when mismatches are detected.\n   • Added comprehensive logging and error handling to address out-of-bounds positions.\n3. Client-Side Intelligent Fallback (src/services/grammar.ts):\n   • Updated applyTextSuggestion with multiple fallback strategies:\n     - First, attempt the original positions.\n     - Second, search for all instances and select the closest match based on distance.\n   • Enhanced error handling to prevent application crashes in ambiguous scenarios.\n4. Production Deployment:\n   • Deployed updated Firebase functions with these fixes.\n   • Changes are live and ready for testing.\n\nExpected Results:\n• Grammar suggestions now target the correct character positions.\n• Server-side auto-correction ensures accurate position matching.\n• Intelligent client-side fallbacks handle ambiguous text matches.\n• Robust error handling and enhanced logging aid in debugging future issues.\n</info added on 2025-06-17T22:43:31.690Z>\n<info added on 2025-06-17T22:57:38.711Z>\nCRITICAL BUG FIX: Resolved the issue where grammar suggestions were not appearing for longer text samples. The root cause was the reliance on .indexOf(), which returns only the first occurrence of a word, leading to incorrect position corrections when the target text appeared multiple times. The fix replaces the simple index search with an intelligent, multi-instance detection algorithm that:\n1. Scans the entire text to identify all occurrences of the target string.\n2. Calculates the distance between each occurrence and the AI’s intended position.\n3. Selects the occurrence that is closest to the original suggestion's position.\nThis enhancement successfully fixes position mismatches for common words and ensures that grammar suggestions for longer texts are fully and accurately applied, with backward compatibility maintained.\n</info added on 2025-06-17T22:57:38.711Z>",
-            "status": "done"
-          },
-          {
-            "id": 7,
-            "title": "Implement Custom Marks and Interactive Hover Cards",
-            "description": "Enable visual highlighting in the Lexical editor and build interactive hover cards for displaying detailed suggestion information.",
-            "dependencies": [
-              5
-            ],
-            "details": "Add custom mark functionality in the editor; design hover cards with suggestion controls that appear on hover over marked text, ensuring they interact seamlessly with the editor.",
+            "details": "Design custom mark structure, implement highlighting logic, and ensure compatibility with existing editor functionality.\n<info added on 2025-06-20T03:13:10.354Z>\nUpdate subtask to integrate the @lexical/mark package as the primary solution for text highlighting. Install the dependencies (@lexical/mark, @lexical/text, and @lexical/utils) and use $createMarkNode() to create custom mark nodes within editor.update() transactions, ensuring proper application on selected text ranges. Implement custom marks for spelling, grammar, and style errors by applying designated Tailwind CSS classes (bg-red-100 text-red-800 for spelling, bg-yellow-100 text-yellow-800 for grammar, bg-blue-100 text-blue-800 for style). Coordinate with Lexical's reconciliation system using appropriate flags to prevent infinite loops, and leverage Lexical APIs such as $createTextNode(), $getRoot(), and $getSelection(). Enhance accessibility by adding ARIA labels, dataset attributes (data-suggestion-id), role=\"mark\", and keyboard navigation support.\n</info added on 2025-06-20T03:13:10.354Z>",
             "status": "pending"
           },
           {
-            "id": 8,
-            "title": "Ensure Keyboard Accessibility and Final Integration",
-            "description": "Test and implement keyboard navigation and accessibility for the sidebar, hover cards, and suggestion controls.",
+            "id": 2,
+            "title": "Hover Card UI Component",
+            "description": "Build the detail cards that display suggestion data in a hoverable format, incorporating accessibility features.",
+            "dependencies": [],
+            "details": "Create a reusable UI component for hover cards with proper ARIA roles, keyboard navigation support, and styling aligned with the design system.\n<info added on 2025-06-20T02:52:52.480Z>\nMAJOR UPDATE: Switch to a singleton GrammarHoverCard implementation using @floating-ui/react instead of the shadcn HoverCard. This change is driven by performance research showing that using a floating-ui singleton pattern can efficiently manage thousands of grammar marks, reducing DOM bloat by avoiding individual Trigger wrappers. The new component will leverage floating-ui’s middleware (offset, flip, shift, arrow) for precise positioning within a full scroll container, ensuring optimal performance while preserving ARIA roles, keyboard navigation, and consistent shadcn design token styling.\n</info added on 2025-06-20T02:52:52.480Z>\n<info added on 2025-06-20T02:54:09.054Z>\nDEPENDENCY NOTE: Install @floating-ui/react (pnpm add @floating-ui/react) to enable the useFloating hook together with the offset, flip, shift, and arrow middleware critical for the singleton hover card positioning system.\n\nACCESSIBILITY CHECKLIST:\n• role=\"tooltip\" on floating card\n• aria-describedby linking each mark to its suggestion content\n• Comprehensive keyboard navigation support (Tab, Enter, Escape, Arrow keys)\n• Robust focus management for screen reader compatibility\n• High contrast support implemented using shadcn design tokens\n\nTESTING APPROACH:\n• Unit tests covering GrammarHoverCard functionality\n• Integration tests simulating thousands of grammar marks\n• Performance evaluation using Chrome DevTools Flamechart\n• Detailed accessibility tests with various screen readers\n• Cross-browser tests addressing edge cases in hover card positioning\n</info added on 2025-06-20T02:54:09.054Z>\n<info added on 2025-06-20T03:13:37.133Z>\nNEW RESEARCH INTEGRATION – Floating-UI Singleton Key Patterns\n• CRITICAL DOM ARCHITECTURE: \n  - Retain highlight marks in Lexical using a custom MarkNode in editor.update().\n  - Render the hover card via a portal outside the editor root to prevent mutations in the editable DOM.\n  - Apply floating-ui’s safePolygon helper with an 8px+ offset to ensure the card does not overlap its reference.\n• EVENT HANDLING PATTERN:\n  - Use a single delegate on the editor root with useHover, eliminating per-span listeners.\n  - Attach pointermove/pointerleave events on the editor root; inspect e.target.dataset.suggestionId to determine the target element and pass it to floating-ui’s refs.setReference.\n  - Implement safePolygon with a buffer of 4 via handleClose.\n• FINITE STATE MACHINE: \n  - Model hover card states as idle → opening → open → closing, leveraging existing transitions emitted by useHover/useDismiss.\n• PERFORMANCE ENHANCEMENTS:\n  - Utilize arrow middleware (arrow({element: arrowRef})) for tooltip arrow positioning.\n  - Enable scroll follow by monitoring the editor’s parent container scroll events and triggering update().\n  - Enhance keyboard navigation with useListNavigation for arrow key cycling and Esc handling via useDismiss.\n  - Employ requestIdleCallback for efficient buildPositionMap execution when the editor is idle.\n</info added on 2025-06-20T03:13:37.133Z>",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Hover Card Positioning System",
+            "description": "Implement logic to accurately position the hover cards relative to text marks in the editor.",
             "dependencies": [
-              6,
-              7
+              1,
+              2
             ],
-            "details": "Conduct accessibility audits to confirm full keyboard support, proper ARIA attributes, and effective state synchronization between the editor and UI components.",
+            "details": "Develop algorithms and event handling for dynamic card positioning, ensuring smooth interaction even with debounced input handling.\n<info added on 2025-06-20T02:53:20.338Z>\nImplement floating-ui positioning based on recent performance research. Use floating-ui's middleware stack to configure an 8px offset between the mark and hover card, automatic flipping when the element is clipped in the viewport, a 4px padded shift for edge sliding, and an arrow for dynamic indicator positioning. Replace per-mark event listeners with a single event delegation strategy on the editor root. This involves registering mutation listeners to detect grammar marks and, on mouseover, teleporting the hover card to the active element using GrammarHoverCard methods; similarly, clearing the reference on mouseleave to hide the card. The updated approach leverages superior scroll container handling, reduces DOM overhead by eliminating extra nodes, avoids React reconciliation issues with numerous elements, and maintains full accessibility support with proper tooltip and aria attributes.\n</info added on 2025-06-20T02:53:20.338Z>\n<info added on 2025-06-20T03:14:06.800Z>\nCritical update: Incorporate a proven event delegation strategy from test.md research. Replace individual per-span listeners with a single event delegation setup on the editor's root element. Implement a mouseover handler that checks if the event target has a suggestion identifier (via dataset.suggestionId) and, if so, calls GrammarHoverCard.setReference(target). Similarly, add a mouseleave handler that clears the reference (by calling GrammarHoverCard.setReference(null)) only when the pointer leaves the editor area. This approach leverages flip() middleware for off-screen handling, avoids complex DOM cascades by preventing mutations during hover, and uses a portal for rendering the hover card to ensure stable performance and accessibility. Additionally, apply safePolygon techniques to prevent card flicker when moving between the marked text and the hover card.\n</info added on 2025-06-20T03:14:06.800Z>",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Integration & Event Handling",
+            "description": "Connect the custom marks, hover cards, and sidebar UI elements with debounced input and API integration for real-time suggestions.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Integrate grammar API calls, manage event handling between UI components, perform error handling, and ensure keyboard accessibility across the system.\n<info added on 2025-06-20T02:53:53.308Z>\nIntegration is updated to use a floating-ui singleton pattern. A single GrammarHoverCard component will be mounted within the DocumentEditor, and event delegation from the editor root will handle hover triggers instead of individual mark listeners. Floating card actions (Accept, Dismiss, Explain) will now connect directly to existing applyTextSuggestion logic with proper requestId guards to prevent race conditions, while maintaining debounced grammar checking that allows the card to display instantly on hover. Performance will be monitored using Chrome DevTools to ensure scripting per hover remains under 5ms. Additionally, keyboard accessibility improvements have been implemented: users can navigate grammar marks using Tab, trigger the hover card with Enter/Space, dismiss it with Escape, and use arrow keys to switch between suggestion actions. If performance issues arise, a fallback to shadcn HoverCard for low-count scenarios is prepared, although initial research supports the efficiency of the floating-ui singleton approach even with thousands of marks.\n</info added on 2025-06-20T02:53:53.308Z>\n<info added on 2025-06-20T03:14:29.661Z>\nLexical reconciliation coordination and performance guards have been added. Integration now employs flags to prevent infinite update loops and ensures that grammar marks are applied exclusively within editor.update() transactions, maintaining a stable DOM during hover states. Expensive operations such as buildPositionMap and updateGrammarMarks are scheduled using requestIdleCallback with a fallback to setTimeout, ensuring that the UI remains responsive even under heavy editor activity. Accessibility improvements include leveraging useListNavigation for arrow-key cycling among suggestion actions and useDismiss for effortless Escape key handling, along with full support for Tab, Enter/Space triggers, and screen reader compatibility via aria-describedby. Performance and integration tests now cover scenarios with thousands of grammar marks, cross-browser positioning edge cases, and comprehensive accessibility validations.\n</info added on 2025-06-20T03:14:29.661Z>",
             "status": "pending"
           }
         ]
@@ -579,41 +539,65 @@
         "subtasks": [
           {
             "id": 1,
-            "title": "Analyze and Document Existing Editor Logic",
-            "description": "Review and document the current rich-text editor architecture and integration points, focusing on grammar and spell-check functionalities to identify potential integration areas for passive voice suggestions.",
+            "title": "Architecture Analysis",
+            "description": "Study and document the existing editor integration points to understand the current architecture.",
             "dependencies": [],
-            "details": "Examine how the editor processes suggestions, and note any existing data structures or event handling that will be extended to support passive voice detection. Create a documentation file listing key modules and components.",
+            "details": "Identify integration points and document how the editor interacts with grammar system. Include current passive voice handling if any.",
             "status": "pending"
           },
           {
             "id": 2,
-            "title": "Extend Logic for Passive Voice Detection",
-            "description": "Modify and extend the existing suggestion logic to detect and handle passive voice usage, ensuring seamless operation alongside grammar and spell-check suggestions.",
+            "title": "Passive Voice Detection Logic",
+            "description": "Extend the existing suggestion system to incorporate passive voice detection.",
             "dependencies": [
               1
             ],
-            "details": "Implement new functions or modify existing ones to analyze sentence structure for passive voice patterns. Ensure that the passive voice detection can correctly trigger suggestions without interfering with other editor functionalities.",
+            "details": "Analyze the current suggestion logic, design the passive voice detection algorithm, and plan integration into the existing system.",
             "status": "pending"
           },
           {
             "id": 3,
-            "title": "Implement Distinct Highlighting for Passive Voice Suggestions",
-            "description": "Develop and integrate a distinct visual highlighting mechanism for passive voice suggestions within the rich-text editor, differentiating them from other types of suggestions.",
+            "title": "Visual Highlighting System",
+            "description": "Implement distinct visual styling for passive voice suggestions within the editor.",
             "dependencies": [
               2
             ],
-            "details": "Define new CSS classes or styles for passive voice suggestions and integrate these into the editor's rendering logic. Test to ensure that the highlighting stands out and does not conflict with existing styles.",
+            "details": "Design and develop a visual highlighting mechanism that differentiates passive suggestions from other grammar suggestions.",
             "status": "pending"
           },
           {
             "id": 4,
-            "title": "Develop Hover Cards and Keyboard Navigation for Passive Voice Suggestions",
-            "description": "Create interactive hover cards and keyboard navigation features to enhance user interaction with passive voice suggestions, ensuring an intuitive and accessible user experience.",
+            "title": "UI Component Development for Hover Cards",
+            "description": "Develop hover cards that display information about passive suggestions.",
             "dependencies": [
               2,
               3
             ],
-            "details": "Design the UI component for hover cards that provide detailed info on passive voice usage. Implement keyboard event handlers to allow users to navigate through suggestions using keys, ensuring compliance with accessibility standards.",
+            "details": "Create interactive UI components that show detailed explanations for passive suggestions when hovered over.",
+            "status": "pending"
+          },
+          {
+            "id": 5,
+            "title": "Keyboard Navigation for Accessibility",
+            "description": "Ensure that the hover cards and suggestions support keyboard navigation to meet accessibility standards.",
+            "dependencies": [
+              4
+            ],
+            "details": "Implement and test keyboard accessibility features including focus management and navigation controls.",
+            "status": "pending"
+          },
+          {
+            "id": 6,
+            "title": "Integration Testing",
+            "description": "Perform integration testing to confirm that all elements, including the passive voice features, work seamlessly with the existing grammar system.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "details": "Conduct comprehensive tests to validate functionality, UI consistency, and accessibility across the editor.",
             "status": "pending"
           }
         ]
@@ -730,16 +714,57 @@
       {
         "id": 14,
         "title": "Optimize Grammar Checker Performance",
-        "description": "Optimize grammar checker performance to achieve sub-2 second response time as specified in PRD.",
-        "details": "Current implementation takes too long to process text. Investigate and implement optimizations including: reducing OpenAI token usage through prompt optimization and response compression, implementing text chunking for large documents with parallel processing, adding aggressive client-side caching strategies with longer TTL, optimizing Firebase function cold starts through keep-warm strategies, implementing streaming responses for real-time user feedback, potentially using faster AI models (GPT-4o-mini) for basic corrections, and adding request prioritization for interactive vs background checks.",
-        "testStrategy": "Measure response times with various text lengths and ensure 95% of requests complete under 2 seconds. Test with large documents (5000+ words), verify streaming functionality provides immediate feedback, and confirm caching reduces repeated request latency.",
+        "description": "Overhaul the grammar checker system by implementing a hybrid client-first architecture. Utilize unified, retext-english, and nspell for baseline grammar checking, while reserving GPT-4o for advanced style suggestions. This update aims to address critical issues identified in grammar-refactor.md including latency, position tracking, Unicode handling, caching problems, race conditions, and cost scalability.",
         "status": "pending",
         "dependencies": [
           8
         ],
         "priority": "medium",
-        "subtasks": [],
-        "complexityScore": 7
+        "details": "The current GPT-4o-only implementation suffers from 12 critical issues. This task now requires a comprehensive system overhaul. The new approach should include:\n\n1. Baseline grammar checking performed on the client using unified combined with retext-english and nspell to efficiently handle common grammar problems.\n2. Conditional utilization of GPT-4o to provide advanced style suggestions only when needed, reducing costs and latency.\n3. Improved token usage optimization across prompts and responses to minimize latency.\n4. Enhanced parallel processing with text chunking to maintain performance for large documents.\n5. Advanced caching strategies with proper TTL and consistency to fix existing cache problems.\n6. Robust handling of Unicode and proper position tracking for error reporting.\n7. Resolution of race conditions and a scalable cost framework by dynamically swapping model usage based on request priority and complexity.\n\nThis refactor must ensure the system seamlessly transitions between baseline and advanced checking modes while achieving a target where 95% of basic checks are processed under 2 seconds.",
+        "testStrategy": "Conduct extensive testing with both short and large documents (5000+ words). Specific tests should include:\n\n- Verifying that baseline grammar checks using unified, retext-english, and nspell complete in under 2 seconds for 95% of cases.\n- Ensuring advanced style suggestions via GPT-4o are provided correctly upon escalation of issues.\n- Testing Unicode handling and precise error position tracking.\n- Validating enhanced caching performance under repeated load conditions.\n- Simulating concurrent requests to confirm that race conditions are resolved and the system scales cost-effectively.\n- Cross-checking all changes against the 12 critical issues outlined in grammar-refactor.md.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Decision Criteria Engine Development",
+            "description": "Define and implement rules for dynamic model routing between client-side processing and GPT-4o based on performance, cost, and complexity.",
+            "dependencies": [],
+            "details": "Develop a robust engine that uses hybrid routing decision logic. Outline criteria for switching between client processing and API processing, and integrate fallback options to ensure performance consistency.",
+            "status": "pending"
+          },
+          {
+            "id": 2,
+            "title": "Suggestion Classification & Grammar Engine Enhancement",
+            "description": "Implement a client-side baseline grammar engine using unified/retext/nspell and categorize suggestions by complexity and type.",
+            "dependencies": [
+              1
+            ],
+            "details": "Fix Unicode issues and error position mapping while enhancing multi-language support and confidence tuning. Leverage the improved grammar engine to accurately classify suggestions for further processing.",
+            "status": "pending"
+          },
+          {
+            "id": 3,
+            "title": "Cost & Performance Monitoring System",
+            "description": "Overhaul the caching mechanism and integrate performance optimizations to continuously track usage and cost metrics.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Resolve race conditions and infinite loops, and integrate Web Workers and text chunking for enhanced performance. Establish metrics and logging processes to monitor both cost and system performance.",
+            "status": "pending"
+          },
+          {
+            "id": 4,
+            "title": "Seamless Handoff & Comprehensive Testing",
+            "description": "Implement smooth transitions between processing modes and conduct comprehensive testing across the entire system.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Integrate the hybrid routing decision engine with backend modules ensuring seamless handoff between client and server processes. Perform extensive testing to validate concurrency controls, caching improvements, and advanced error handling.",
+            "status": "pending"
+          }
+        ]
       }
     ],
     "metadata": {
