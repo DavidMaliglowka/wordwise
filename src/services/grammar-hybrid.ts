@@ -3,11 +3,12 @@ import retextEnglish from 'retext-english';
 import retextSpell from 'retext-spell';
 import retextPassive from 'retext-passive';
 import retextIndefiniteArticle from 'retext-indefinite-article';
+import retextStringify from 'retext-stringify';
 import * as unorm from 'unorm';
 import GraphemeSplitter from 'grapheme-splitter';
 import { nanoid } from 'nanoid';
 import { auth } from '../lib/firebase';
-import { getSpell } from '../utils/spellLoader';
+import { getHunspellDict, type HunspellDict } from '../utils/spellLoader';
 
 // Types
 interface ClientSuggestion {
@@ -170,11 +171,20 @@ export class UnicodePositionMapper {
 
 // Client-side grammar engine
 export class ClientGrammarEngine {
-  private spellChecker: any = null;
+  private dict!: HunspellDict;
+  private processor: any = null;
 
   async initialize(): Promise<void> {
-    if (!this.spellChecker) {
-      this.spellChecker = await getSpell();
+    if (!this.processor) {
+      this.dict = await getHunspellDict();
+
+      // Build the unified processor once for reuse
+      this.processor = unified()
+        .use(retextEnglish)
+        .use(retextSpell, this.dict) // Pass raw dictionary data
+        .use(retextPassive)
+        .use(retextIndefiniteArticle)
+        .use(retextStringify); // Add compiler to satisfy unified requirements
     }
   }
 
@@ -186,26 +196,22 @@ export class ClientGrammarEngine {
     const positionMapper = new UnicodePositionMapper(normalizedText);
 
     try {
-      const file = await unified()
-        .use(retextEnglish)
-        .use(retextSpell, this.spellChecker)
-        .use(retextPassive)
-        .use(retextIndefiniteArticle)
-        .process(normalizedText);
+      const file = await this.processor!.process(normalizedText);
 
       return file.messages.map((message: any) => {
-        const start = message.place?.[0]?.offset || 0;
-        const end = message.place?.[1]?.offset || start;
+        // Use message.place for position info (modern retext)
+        const start = message.place?.[0]?.offset || message.position?.start?.offset || 0;
+        const end = message.place?.[1]?.offset || message.position?.end?.offset || start;
 
         return {
           id: nanoid(),
-          rule: message.ruleId || 'unknown',
-          message: message.reason || message.message,
-          severity: this.mapSeverity(message.ruleId),
+          rule: message.ruleId || message.source || 'unknown',
+          message: message.reason || message.message || 'Grammar issue detected',
+          severity: this.mapSeverity(message.ruleId || message.source),
           range: { start, end },
-          replacement: message.expected?.[0] || undefined,
-          type: this.mapType(message.ruleId),
-          confidence: this.mapConfidence(message.ruleId)
+          replacement: (message as any).expected?.[0] || undefined,
+          type: this.mapType(message.ruleId || message.source),
+          confidence: this.mapConfidence(message.ruleId || message.source)
         };
       });
     } catch (error) {
@@ -217,7 +223,7 @@ export class ClientGrammarEngine {
   private mapSeverity(ruleId: string): 'error' | 'warning' | 'suggestion' {
     if (!ruleId) return 'suggestion';
 
-    if (ruleId.includes('spell')) return 'error';
+    if (ruleId.includes('spell') || ruleId.includes('retext-spell')) return 'error';
     if (ruleId.includes('passive') || ruleId.includes('article')) return 'warning';
     return 'suggestion';
   }
@@ -225,8 +231,8 @@ export class ClientGrammarEngine {
   private mapType(ruleId: string): 'spelling' | 'grammar' | 'style' | 'passive' {
     if (!ruleId) return 'grammar';
 
-    if (ruleId.includes('spell')) return 'spelling';
-    if (ruleId.includes('passive')) return 'passive';
+    if (ruleId.includes('spell') || ruleId.includes('retext-spell')) return 'spelling';
+    if (ruleId.includes('passive') || ruleId.includes('retext-passive')) return 'passive';
     if (ruleId.includes('article') || ruleId.includes('grammar')) return 'grammar';
     return 'style';
   }
@@ -235,10 +241,13 @@ export class ClientGrammarEngine {
     if (!ruleId) return 0.5;
 
     // Spelling errors are high confidence
-    if (ruleId.includes('spell')) return 0.95;
+    if (ruleId.includes('spell') || ruleId.includes('retext-spell')) return 0.95;
 
     // Grammar rules are medium-high confidence
     if (ruleId.includes('article') || ruleId.includes('grammar')) return 0.85;
+
+    // Passive voice suggestions are medium confidence
+    if (ruleId.includes('passive')) return 0.75;
 
     // Style suggestions are lower confidence
     return 0.7;
