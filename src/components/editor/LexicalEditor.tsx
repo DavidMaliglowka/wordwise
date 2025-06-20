@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useCallback, useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -14,6 +14,10 @@ import { LinkNode, AutoLinkNode } from '@lexical/link';
 import { $generateHtmlFromNodes } from '@lexical/html';
 import { $getRoot, EditorState, $createParagraphNode, $createTextNode } from 'lexical';
 import EditorToolbar from './EditorToolbar';
+import { GrammarMarkNode } from './GrammarMarkNode';
+import { GrammarPlugin } from './GrammarPlugin';
+import { SuggestionHoverCard } from './SuggestionHoverCard';
+import { EditorSuggestion } from '../../types/grammar';
 
 export interface EditorStateData {
   content: string;
@@ -36,6 +40,12 @@ interface LexicalEditorProps {
   autoSave?: boolean;
   autoSaveDelay?: number;
   readOnly?: boolean;
+  // Grammar-related props
+  grammarSuggestions?: EditorSuggestion[];
+  onGrammarSuggestionHover?: (suggestionId: string | null) => void;
+  onGrammarSuggestionClick?: (suggestion: EditorSuggestion) => void;
+  onApplyGrammarSuggestion?: (suggestion: EditorSuggestion) => void;
+  onDismissGrammarSuggestion?: (suggestionId: string) => void;
 }
 
 // Hook to initialize content
@@ -182,6 +192,14 @@ const theme = {
     strikethrough: 'line-through',
     code: 'bg-gray-100 px-1 py-0.5 rounded text-sm font-mono',
   },
+  // Grammar mark styles (applied via className in GrammarMarkNode)
+  grammarMark: {
+    base: 'cursor-pointer rounded transition-colors',
+    spelling: 'bg-red-100 text-red-800 border-b-2 border-red-300 hover:bg-red-200',
+    grammar: 'bg-yellow-100 text-yellow-800 border-b-2 border-yellow-300 hover:bg-yellow-200',
+    punctuation: 'bg-orange-100 text-orange-800 border-b-2 border-orange-300 hover:bg-orange-200',
+    style: 'bg-blue-100 text-blue-800 border-b-2 border-blue-300 hover:bg-blue-200',
+  },
 };
 
 const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
@@ -193,8 +211,15 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   autoSave = false,
   autoSaveDelay = 2000,
   readOnly = false,
+  grammarSuggestions = [],
+  onGrammarSuggestionHover,
+  onGrammarSuggestionClick,
+  onApplyGrammarSuggestion,
+  onDismissGrammarSuggestion,
 }, ref) => {
   const [updateTrigger, setUpdateTrigger] = React.useState<{ content: string; timestamp: number } | null>(null);
+  const [editorElement, setEditorElement] = useState<HTMLElement | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const initialConfig = {
     namespace: 'WordWiseEditor',
@@ -209,6 +234,7 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
       QuoteNode,
       LinkNode,
       AutoLinkNode,
+      GrammarMarkNode, // Add custom grammar mark node
     ],
     editable: !readOnly,
   };
@@ -231,6 +257,19 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
       });
     }
   }, [onChange]);
+
+  // Capture editor element for hover card event delegation
+  useEffect(() => {
+    if (editorRef.current) {
+      const contentEditableElement = editorRef.current.querySelector('[contenteditable="true"]');
+      setEditorElement(contentEditableElement as HTMLElement);
+    }
+  }, []);
+
+  // Helper function to get suggestion by ID
+  const getSuggestionById = useCallback((id: string) => {
+    return grammarSuggestions.find(suggestion => suggestion.id === id);
+  }, [grammarSuggestions]);
 
   // Keyboard shortcuts for save
   useEffect(() => {
@@ -257,7 +296,7 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   return (
     <div className={`relative ${className} ${readOnly ? '' : ''}`}>
       <LexicalComposer initialConfig={initialConfig}>
-        <div className="relative flex flex-col h-full">
+        <div ref={editorRef} className="relative flex flex-col h-full">
           <div className="flex-1 relative">
             <RichTextPlugin
               contentEditable={
@@ -289,6 +328,12 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
                 setUpdateTrigger(null);
               }}
             />
+            {/* Grammar Plugin for custom marks and interactions */}
+            <GrammarPlugin
+              suggestions={grammarSuggestions}
+              onSuggestionHover={onGrammarSuggestionHover}
+              onSuggestionClick={onGrammarSuggestionClick}
+            />
           </div>
           {!readOnly && (
             <div className="fixed bottom-0 left-0 right-0 z-10">
@@ -296,6 +341,13 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
             </div>
           )}
         </div>
+        {/* Grammar Hover Card - rendered outside editor to prevent DOM mutations */}
+        <SuggestionHoverCard
+          editorElement={editorElement}
+          getSuggestion={getSuggestionById}
+          onApplySuggestion={onApplyGrammarSuggestion}
+          onDismissSuggestion={onDismissGrammarSuggestion}
+        />
       </LexicalComposer>
     </div>
   );
