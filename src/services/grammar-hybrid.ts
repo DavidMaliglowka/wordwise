@@ -3,12 +3,15 @@ import retextEnglish from 'retext-english';
 import retextSpell from 'retext-spell';
 import retextPassive from 'retext-passive';
 import retextIndefiniteArticle from 'retext-indefinite-article';
+import retextRepeatedWords from 'retext-repeated-words';
 import retextStringify from 'retext-stringify';
 import * as unorm from 'unorm';
 import GraphemeSplitter from 'grapheme-splitter';
 import { nanoid } from 'nanoid';
 import { auth } from '../lib/firebase';
 import { getHunspellDict, type HunspellDict } from '../utils/spellLoader';
+
+// retext-usage removed due to deprecation and internal errors
 
 // Types
 interface ClientSuggestion {
@@ -172,36 +175,69 @@ export class UnicodePositionMapper {
 // Client-side grammar engine
 export class ClientGrammarEngine {
   private dict!: HunspellDict;
+  private spellChecker: any = null;
   private processor: any = null;
 
-  async initialize(): Promise<void> {
-    if (!this.processor) {
-      this.dict = await getHunspellDict();
+  private async getProcessor() {
+    if (this.processor) return this.processor;
 
-      // Build the unified processor once for reuse
-      this.processor = unified()
-        .use(retextEnglish)
-        .use(retextSpell, this.dict) // Pass raw dictionary data
-        .use(retextPassive)
-        .use(retextIndefiniteArticle)
-        .use(retextStringify); // Add compiler to satisfy unified requirements
-    }
+    this.dict = await getHunspellDict();
+    this.spellChecker = await import('nspell').then(m => m.default(this.dict));
+
+    this.processor = unified()
+      .use(retextEnglish)
+      .use(retextSpell, this.dict as any) // Cast to avoid TypeScript error
+      .use(retextPassive)
+      .use(retextIndefiniteArticle)
+      .use(retextRepeatedWords)
+      // Note: retext-usage removed due to internal errors (deprecated package)
+      .use(retextStringify);
+
+    return this.processor;
+  }
+
+  async initialize(): Promise<void> {
+    // Initialization happens in getProcessor() now
+  }
+
+  // Helper function to pick best suggestion (prefer apostrophe additions)
+  private pickBestSuggestion(original: string, suggestions: string[]): string {
+    if (!suggestions || suggestions.length === 0) return '';
+
+    // Prefer suggestions that only add an apostrophe
+    const apostropheMatch = suggestions.find(s =>
+      s.replace(/'/g, '') === original.replace(/'/g, '')
+    );
+
+    if (apostropheMatch) return apostropheMatch;
+
+    // Otherwise return the first (highest ranked) suggestion
+    return suggestions[0];
   }
 
   async analyzeSuggestions(text: string): Promise<ClientSuggestion[]> {
-    await this.initialize();
-
     // Normalize text first
     const normalizedText = unorm.nfc(text);
     const positionMapper = new UnicodePositionMapper(normalizedText);
 
     try {
-      const file = await this.processor!.process(normalizedText);
+      const processor = await this.getProcessor();
+      const file = await processor.process(normalizedText);
 
       return file.messages.map((message: any) => {
-        // Use message.place for position info (modern retext)
-        const start = message.place?.[0]?.offset || message.position?.start?.offset || 0;
-        const end = message.place?.[1]?.offset || message.position?.end?.offset || start;
+        // Fix position mapping - use message.location for accurate offsets
+        const start = message.location?.start?.offset ?? 0;
+        const end = message.location?.end?.offset ?? start;
+
+        // Get better suggestions for spelling errors
+        let replacement = undefined;
+        if (message.source === 'retext-spell' && this.spellChecker) {
+          const word = normalizedText.slice(start, end);
+          const suggestions = this.spellChecker.suggest(word, { max: 10 });
+          replacement = this.pickBestSuggestion(word, suggestions);
+        } else {
+          replacement = (message as any).expected?.[0] || undefined;
+        }
 
         return {
           id: nanoid(),
@@ -209,7 +245,7 @@ export class ClientGrammarEngine {
           message: message.reason || message.message || 'Grammar issue detected',
           severity: this.mapSeverity(message.ruleId || message.source),
           range: { start, end },
-          replacement: (message as any).expected?.[0] || undefined,
+          replacement,
           type: this.mapType(message.ruleId || message.source),
           confidence: this.mapConfidence(message.ruleId || message.source)
         };
@@ -220,37 +256,25 @@ export class ClientGrammarEngine {
     }
   }
 
-  private mapSeverity(ruleId: string): 'error' | 'warning' | 'suggestion' {
-    if (!ruleId) return 'suggestion';
+  private mapType(rule: string): 'spelling' | 'grammar' | 'style' | 'passive' {
+    if (rule.includes('spell')) return 'spelling';
+    if (rule.includes('passive')) return 'passive';
+    if (rule.includes('usage') || rule.includes('article')) return 'grammar';
+    if (rule.includes('repeated') || rule.includes('redundant')) return 'style';
+    return 'grammar';
+  }
 
-    if (ruleId.includes('spell') || ruleId.includes('retext-spell')) return 'error';
-    if (ruleId.includes('passive') || ruleId.includes('article')) return 'warning';
+  private mapSeverity(rule: string): 'error' | 'warning' | 'suggestion' {
+    if (rule.includes('spell')) return 'error';
+    if (rule.includes('usage') || rule.includes('article')) return 'warning';
     return 'suggestion';
   }
 
-  private mapType(ruleId: string): 'spelling' | 'grammar' | 'style' | 'passive' {
-    if (!ruleId) return 'grammar';
-
-    if (ruleId.includes('spell') || ruleId.includes('retext-spell')) return 'spelling';
-    if (ruleId.includes('passive') || ruleId.includes('retext-passive')) return 'passive';
-    if (ruleId.includes('article') || ruleId.includes('grammar')) return 'grammar';
-    return 'style';
-  }
-
-  private mapConfidence(ruleId: string): number {
-    if (!ruleId) return 0.5;
-
-    // Spelling errors are high confidence
-    if (ruleId.includes('spell') || ruleId.includes('retext-spell')) return 0.95;
-
-    // Grammar rules are medium-high confidence
-    if (ruleId.includes('article') || ruleId.includes('grammar')) return 0.85;
-
-    // Passive voice suggestions are medium confidence
-    if (ruleId.includes('passive')) return 0.75;
-
-    // Style suggestions are lower confidence
-    return 0.7;
+  private mapConfidence(rule: string): number {
+    if (rule.includes('spell')) return 0.9;
+    if (rule.includes('usage') || rule.includes('article')) return 0.8;
+    if (rule.includes('passive')) return 0.7;
+    return 0.6;
   }
 }
 

@@ -89,6 +89,9 @@ importers:
       retext-passive:
         specifier: ^5.0.0
         version: 5.0.0
+      retext-repeated-words:
+        specifier: ^5.0.0
+        version: 5.0.0
       retext-spell:
         specifier: ^6.1.0
         version: 6.1.0
@@ -2399,6 +2402,9 @@ packages:
 
   retext-passive@5.0.0:
     resolution: {integrity: sha512-N9PpBPvE37Z5h/hvgfSIFJNB4E/iYJ9EHr848t53hbKRJkD7hWJf4D+UOIj5fxjOOO/WQKX53xLypEQxHWuCtA==}
+
+  retext-repeated-words@5.0.0:
+    resolution: {integrity: sha512-PY8Zt+4Akv78OgZdwSvbN6fl2Eg3UMVz/uppEEVNO/sGUi2N1t8YOPi+F2twvlVSjOFMIPIBueceRfteSOsAWw==}
 
   retext-spell@6.1.0:
     resolution: {integrity: sha512-gUW1hrMIlm5pVI/tOZ/q+nb9hgBRf9DflQxNHdaJHDi3V5Ku8f2fg5OlMnX29NzIKq+NACNDeyGuGf+y2TgRLw==}
@@ -5450,6 +5456,14 @@ snapshots:
       nlcst-to-string: 4.0.0
       unist-util-find-before: 4.0.1
       unist-util-position: 5.0.0
+      vfile: 6.0.3
+
+  retext-repeated-words@5.0.0:
+    dependencies:
+      '@types/nlcst': 2.0.3
+      nlcst-to-string: 4.0.0
+      unist-util-position: 5.0.0
+      unist-util-visit: 5.0.0
       vfile: 6.0.3
 
   retext-spell@6.1.0:

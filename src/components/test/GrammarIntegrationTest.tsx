@@ -18,10 +18,10 @@ const GrammarIntegrationTest: React.FC = () => {
   const [testText, setTestText] = useState(
     // Deliberate errors for testing
     'This is a test document with some grammar errors. She dont like apples, and their going to the store. ' +
+    'A elephant walked by and and the cat was fed by the dog. This is is a repeated word problem. ' +
     'We need to test the grammar checking system with various types of errors including spelling mistakes, ' +
-    'punctuation errors, and grammatical issues. The quick brown fox jumps over the lazy dog. ' +
-    'This sentance has a speling error. We should be able to see these errors highlighted in the editor ' +
-    'and interact with them through hover cards.'
+    'punctuation errors, and grammatical issues. This sentance has a speling error and dont forget to check there spelling. ' +
+    'We should be able to see these errors highlighted in the editor and interact with them through hover cards.'
   );
   const [stats, setStats] = useState({
     wordCount: 0,
@@ -119,10 +119,10 @@ const GrammarIntegrationTest: React.FC = () => {
   const resetTest = () => {
     const testContent =
       'This is a test document with some grammar errors. She dont like apples, and their going to the store. ' +
+      'A elephant walked by and and the cat was fed by the dog. This is is a repeated word problem. ' +
       'We need to test the grammar checking system with various types of errors including spelling mistakes, ' +
-      'punctuation errors, and grammatical issues. The quick brown fox jumps over the lazy dog. ' +
-      'This sentance has a speling error. We should be able to see these errors highlighted in the editor ' +
-      'and interact with them through hover cards.';
+      'punctuation errors, and grammatical issues. This sentance has a speling error and dont forget to check there spelling. ' +
+      'We should be able to see these errors highlighted in the editor and interact with them through hover cards.';
 
     if (editorRef.current) {
       editorRef.current.updateContent(testContent);

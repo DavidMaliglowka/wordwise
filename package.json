@@ -51,6 +51,7 @@
     "retext-english": "^5.0.0",
     "retext-indefinite-article": "^5.0.0",
     "retext-passive": "^5.0.0",
+    "retext-repeated-words": "^5.0.0",
     "retext-spell": "^6.1.0",
     "retext-stringify": "^4.0.0",
     "unified": "^11.0.5",
