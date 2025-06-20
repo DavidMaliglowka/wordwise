@@ -35,11 +35,21 @@ interface ProcessingDecision {
   estimatedLatency: number;
 }
 
-// Position mapping interface
+// Enhanced position mapping interface per grammar-refactor.md
 interface PositionMap {
-  graphemeIndex: number;
-  utf16Offset: number;
-  byteOffset: number;
+  clusterToUnit: Uint32Array; // C0 -> C1 (grapheme clusters to UTF-16 code units)
+  unitToCluster: Uint32Array; // C1 -> C0 (UTF-16 code units to grapheme clusters)
+  text: string; // The normalized text this map applies to
+  totalClusters: number;
+  totalUnits: number;
+  totalBytes: number;
+}
+
+// Coordinate system mapping per grammar-refactor.md spec
+interface CoordinateMapping {
+  graphemeIndex: number;    // C0: User-perceived characters
+  utf16Offset: number;      // C1: JS string slicing, Lexical marks
+  byteOffset: number;       // C2: GPT tokens, analytics
 }
 
 // Decision engine for choosing processing approach
@@ -130,45 +140,117 @@ export class GrammarDecisionEngine {
   }
 }
 
-// Unicode position mapper for precise index handling
+// Unicode position mapper for precise index handling per grammar-refactor.md
 export class UnicodePositionMapper {
   private graphemeSplitter = new GraphemeSplitter();
-  private positionMap: PositionMap[] = [];
+  private positionMap: PositionMap;
+  private coordinateMappings: CoordinateMapping[] = [];
 
   constructor(private text: string) {
-    this.buildPositionMap();
+    // Always normalize to NFC first as per grammar-refactor.md
+    this.text = unorm.nfc(text);
+    this.positionMap = this.buildPositionMap();
   }
 
-  private buildPositionMap(): void {
+  private buildPositionMap(): PositionMap {
     const graphemes = this.graphemeSplitter.splitGraphemes(this.text);
+    const totalClusters = graphemes.length;
+    const totalUnits = this.text.length;
+    const totalBytes = new TextEncoder().encode(this.text).length;
+
+    // Build the coordinate mappings as per grammar-refactor.md spec
+    const clusterToUnit = new Uint32Array(totalClusters + 1);
+    const unitToCluster = new Uint32Array(totalUnits + 1);
+
+    this.coordinateMappings = [];
     let utf16Offset = 0;
     let byteOffset = 0;
 
-    this.positionMap = graphemes.map((grapheme, index) => {
-      const position: PositionMap = {
-        graphemeIndex: index,
+    graphemes.forEach((grapheme, clusterIndex) => {
+      // Store coordinate mapping for reference
+      this.coordinateMappings.push({
+        graphemeIndex: clusterIndex,
         utf16Offset,
         byteOffset
-      };
+      });
+
+      // Build cluster-to-unit mapping
+      clusterToUnit[clusterIndex] = utf16Offset;
+
+      // Build unit-to-cluster mapping for each UTF-16 code unit in this grapheme
+      for (let i = 0; i < grapheme.length; i++) {
+        if (utf16Offset + i < totalUnits) {
+          unitToCluster[utf16Offset + i] = clusterIndex;
+        }
+      }
 
       utf16Offset += grapheme.length;
       byteOffset += new TextEncoder().encode(grapheme).length;
-
-      return position;
     });
-  }
 
-  utf16ToGrapheme(utf16Offset: number): number {
-    for (let i = 0; i < this.positionMap.length; i++) {
-      if (this.positionMap[i].utf16Offset >= utf16Offset) {
-        return i;
-      }
+    // Sentinel values
+    clusterToUnit[totalClusters] = totalUnits;
+    if (totalUnits < unitToCluster.length) {
+      unitToCluster[totalUnits] = totalClusters;
     }
-    return this.positionMap.length;
+
+    return {
+      clusterToUnit,
+      unitToCluster,
+      text: this.text,
+      totalClusters,
+      totalUnits,
+      totalBytes
+    };
   }
 
+  // Convert UTF-16 offset to grapheme cluster index (C1 -> C0)
+  utf16ToGrapheme(utf16Offset: number): number {
+    if (utf16Offset >= this.positionMap.unitToCluster.length) {
+      return this.positionMap.totalClusters;
+    }
+    return this.positionMap.unitToCluster[utf16Offset];
+  }
+
+  // Convert grapheme cluster index to UTF-16 offset (C0 -> C1)
   graphemeToUtf16(graphemeIndex: number): number {
-    return this.positionMap[graphemeIndex]?.utf16Offset || this.text.length;
+    if (graphemeIndex >= this.positionMap.clusterToUnit.length) {
+      return this.positionMap.totalUnits;
+    }
+    return this.positionMap.clusterToUnit[graphemeIndex];
+  }
+
+  // Get coordinate mapping for a specific grapheme cluster
+  getCoordinateMapping(graphemeIndex: number): CoordinateMapping | null {
+    return this.coordinateMappings[graphemeIndex] || null;
+  }
+
+  // Get the normalized text this mapper applies to
+  getNormalizedText(): string {
+    return this.text;
+  }
+
+  // Validate a UTF-16 range and return corrected bounds
+  validateUtf16Range(start: number, end: number): { start: number; end: number } {
+    const safeStart = Math.max(0, Math.min(start, this.positionMap.totalUnits));
+    const safeEnd = Math.max(safeStart, Math.min(end, this.positionMap.totalUnits));
+
+    return { start: safeStart, end: safeEnd };
+  }
+
+  // Get debug info for troubleshooting position issues
+  getDebugInfo(): {
+    totalGraphemes: number;
+    totalUtf16Units: number;
+    totalBytes: number;
+    sampleMappings: CoordinateMapping[];
+  } {
+    return {
+      totalGraphemes: this.positionMap.totalClusters,
+      totalUtf16Units: this.positionMap.totalUnits,
+      totalBytes: this.positionMap.totalBytes,
+      sampleMappings: this.coordinateMappings.slice(0, 10) // First 10 for debugging
+    };
   }
 }
 
@@ -216,7 +298,7 @@ export class ClientGrammarEngine {
   }
 
   async analyzeSuggestions(text: string): Promise<ClientSuggestion[]> {
-    // Normalize text first
+    // Normalize text first and build position map per grammar-refactor.md
     const normalizedText = unorm.nfc(text);
     const positionMapper = new UnicodePositionMapper(normalizedText);
 
@@ -225,9 +307,30 @@ export class ClientGrammarEngine {
       const file = await processor.process(normalizedText);
 
       return file.messages.map((message: any) => {
-        // Fix position mapping - use message.location for accurate offsets
-        const start = message.location?.start?.offset ?? 0;
-        const end = message.location?.end?.offset ?? start;
+        // Extract position information from retext message
+        // Based on debug results: retext uses 'place' property for positions
+        let rawStart = 0;
+        let rawEnd = 0;
+
+        if (message.place?.start?.offset !== undefined) {
+          rawStart = message.place.start.offset;
+          rawEnd = message.place.end?.offset ?? rawStart;
+        } else if (message.location?.start?.offset !== undefined) {
+          // Fallback to location if place is not available
+          rawStart = message.location.start.offset;
+          rawEnd = message.location.end?.offset ?? rawStart;
+        } else if (message.position?.start?.offset !== undefined) {
+          // Alternative position format
+          rawStart = message.position.start.offset;
+          rawEnd = message.position.end?.offset ?? rawStart;
+        } else if (message.start !== undefined) {
+          // Direct start/end properties
+          rawStart = message.start;
+          rawEnd = message.end ?? rawStart;
+        }
+
+        // Validate and correct positions using the position mapper
+        const { start, end } = positionMapper.validateUtf16Range(rawStart, rawEnd);
 
         // Get better suggestions for spelling errors
         let replacement = undefined;
@@ -353,3 +456,10 @@ export class HybridGrammarService {
 
 // Export singleton instance
 export const hybridGrammarService = HybridGrammarService.getInstance();
+
+// Expose classes globally for testing
+if (typeof window !== 'undefined') {
+  (window as any).UnicodePositionMapper = UnicodePositionMapper;
+  (window as any).GrammarDecisionEngine = GrammarDecisionEngine;
+  (window as any).hybridGrammarService = hybridGrammarService;
+}

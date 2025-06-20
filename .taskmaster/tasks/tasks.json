@@ -605,32 +605,32 @@
       {
         "id": 12,
         "title": "Implement Personal Dictionary",
-        "description": "Implement backend (Firestore, Cloud Function) and frontend (UI) for managing the user's personal dictionary and integrate it into the suggestion logic to prevent false positives.",
-        "details": "Add a 'dictionary' array field to the User document in Firestore. Create Cloud Functions for adding, removing, and listing dictionary terms. Build a UI component (e.g., in Account settings or a modal) for users to manage their dictionary. Modify the grammar/spell check and passive voice Cloud Functions (Tasks 7, 10) to fetch the user's dictionary and filter out suggestions that match dictionary terms before returning them.",
-        "testStrategy": "Test adding, removing, and listing dictionary terms via the UI and backend. Verify that terms added to the dictionary are no longer flagged as errors or passive voice in the editor.",
-        "priority": "medium",
+        "description": "Implement server-side Firestore storage and a user management UI for handling the personal dictionary. Ensure the solution includes sync capabilities that work in tandem with Task 14.6, which handles client-side IndexedDB for instant performance. Also, integrate the dictionary into the suggestion logic to prevent false positives.",
+        "status": "pending",
         "dependencies": [
           4,
           11
         ],
-        "status": "pending",
+        "priority": "medium",
+        "details": "Add a 'dictionary' array field to the User document in Firestore. Create Cloud Functions for adding, removing, and listing dictionary terms with proper authentication and validation. Build a UI component (e.g., within Account settings or as a modal) that allows users to manage their personal dictionary. Implement sync functionality so that changes made in Firestore are synchronized with the client-side IndexedDB provided by Task 14.6. Optionally, modify grammar/spell check and passive voice endpoints to fetch and respect the user's personal dictionary when processing suggestions.",
+        "testStrategy": "Test the backend by adding, removing, and listing dictionary terms via the Cloud Functions and verify that the Firestore updates are working as expected. Verify that the UI correctly reflects and manages dictionary data. Test the sync mechanism to ensure that updates in Firestore propagate to Task 14.6's client-side IndexedDB and vice versa. Also, ensure that the suggestion logic correctly ignores terms present in the personal dictionary.",
         "subtasks": [
           {
             "id": 1,
             "title": "Update Firestore User Documents",
             "description": "Modify the Firestore schema to include personal dictionary fields in user documents.",
             "dependencies": [],
-            "details": "Review the current Firestore structure, design the dictionary field schema, update user documents to include word lists, and ensure proper indexing and security rules are applied.",
+            "details": "Review the current Firestore structure and design the schema to include a 'dictionary' array field. Update user documents accordingly, ensuring proper indexing and security rules are applied. Include considerations for sync functionality with client-side IndexedDB.",
             "status": "pending"
           },
           {
             "id": 2,
             "title": "Create Cloud Functions for CRUD Operations",
-            "description": "Develop Cloud Functions to handle Creating, Reading, Updating, and Deleting dictionary terms.",
+            "description": "Develop Cloud Functions to handle Create, Read, Update, and Delete operations for dictionary terms.",
             "dependencies": [
               1
             ],
-            "details": "Implement endpoints for dictionary term management, integrate authentication checks, and ensure these functions interact properly with the updated Firestore schema.",
+            "details": "Implement secure endpoints for managing dictionary terms. Integrate authentication checks and ensure these functions interact properly with the updated Firestore schema. Incorporate mechanisms to trigger sync events so that changes propagate to the client-side IndexedDB.",
             "status": "pending"
           },
           {
@@ -641,7 +641,7 @@
               1,
               2
             ],
-            "details": "Develop the frontend components for viewing, adding, editing, and deleting dictionary words. Ensure that the UI communicates with the Cloud Functions and handles validation and error states.",
+            "details": "Develop frontend components for viewing, adding, editing, and deleting dictionary words. Ensure that the UI communicates with the Cloud Functions correctly. Include indicators or status for sync activity with Task 14.6's client-side IndexedDB and validation/error handling.",
             "status": "pending"
           },
           {
@@ -652,7 +652,19 @@
               1,
               2
             ],
-            "details": "Modify the existing endpoints to include logic that checks against the user's personal dictionary when processing suggestions. Test the integration thoroughly to maintain endpoint performance and accuracy.",
+            "details": "Modify the existing endpoints to fetch the user's personal dictionary from Firestore and filter out suggestions that match dictionary terms. Ensure that the integration maintains performance and accuracy while remaining compatible with the sync mechanism.",
+            "status": "pending"
+          },
+          {
+            "id": 5,
+            "title": "Implement Sync Capabilities with Client IndexedDB",
+            "description": "Develop synchronization logic to keep the Firestore-based personal dictionary and the client-side IndexedDB (from Task 14.6) in sync.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Implement bi-directional sync between the Firestore database and the client-side IndexedDB. Handle conflict resolution and ensure that updates on either side are reflected accurately and in a timely manner, providing a seamless user experience.",
             "status": "pending"
           }
         ]
@@ -739,7 +751,7 @@
               1
             ],
             "details": "Fix Unicode issues and error position mapping while enhancing multi-language support and confidence tuning. Leverage the improved grammar engine to accurately classify suggestions for further processing.\n<info added on 2025-06-20T18:35:08.743Z>\nDEBUG UPDATE: Identified error \"Cannot process without compiler\" in ClientGrammarEngine.analyzeSuggestions() indicating the unified processor is missing the required compiler/parser setup. While the hybrid engine processes quickly (66ms compared to 5562ms with the legacy system), the configuration issue is preventing suggestions from being generated. It appears that retext-english should be providing both the parser and compiler. There may also be an issue with retext-spell's configuration when used with the custom spell checker, warranting a review of plugin compatibility and overall setup in the unified pipeline.\n</info added on 2025-06-20T18:35:08.743Z>\n<info added on 2025-06-20T18:37:10.941Z>\nUnified processor configuration update: Fixed error \"Cannot process without compiler\" by adding the retext-stringify dependency and restructuring ClientGrammarEngine to initialize a cached processor instance with all required plugins. A fallback processing path now bypasses retext-spell when necessary, ensuring graceful degradation. Additionally, error message mapping has been improved using ruleId, source, or default values for better diagnostics.\n</info added on 2025-06-20T18:37:10.941Z>\n<info added on 2025-06-20T18:43:16.174Z>\nAdded comprehensive timeout and debugging enhancements. Set a 15-second timeout for the main checkGrammar method and a 10-second timeout for dictionary file loading, with fallback mechanisms implemented at every processing level. Debug logging now includes console output throughout the process to track execution and spell checker loading progress, allowing precise identification of hang points or failures. The fallback strategy now operates in four levels: Level 1 uses the full unified processor with spell checking; Level 2 reverts to the unified processor without spell checking; Level 3 employs basic pattern matching; and Level 4 applies simple error detection patterns. Additionally, interface issues have been addressed by implementing a proper GrammarCheckRequest interface, resolving all TypeScript compilation errors, and updating the test component to use the correct method signature. The system now guarantees hybrid test completion within 15 seconds and provides detailed console output for debugging.\n</info added on 2025-06-20T18:43:16.174Z>\n<info added on 2025-06-20T19:07:04.076Z>\nFIXED: Unified Pipeline Compiler Issue – The unified v11 requires a compiler plugin for the .process() method. This has been addressed by adding the retext-stringify compiler and shifting to a processor reuse pattern, where the processor is built once during initialize() and reused for subsequent analyses. In addition, the spell plugin now utilizes a future-proof options object ({ dictionary: spellChecker }), and the position mapping has been enhanced to support both message.place and message.position as fallbacks. Rule identification has been improved to handle both message.ruleId and message.source, with better error messages and increased type safety. These updates yield the hybrid engine returning 8–10 suggestions on test texts with ~60ms processing time, marking it ready for testing.\n</info added on 2025-06-20T19:07:04.076Z>\n<info added on 2025-06-20T19:12:39.699Z>\nDEBUG UPDATE: Enhanced nspell initialization troubleshooting – Added minimal tests to validate basic nspell functionality, improved logging to display the first 200 characters of dictionary file content, and experimented with various nspell initialization approaches. Spell checker validation tests have been implemented and TypeScript linter errors resolved. This debugging update aims to confirm dictionary file loading, determine which initialization method is effective, and verify proper operation of spell checker methods. Next, review the browser console output to pinpoint whether the issue is due to dictionary format, nspell API usage, or another cause.\n</info added on 2025-06-20T19:12:39.699Z>\n<info added on 2025-06-20T19:16:04.246Z>\nDEBUG UPDATE: Investigating dictionary format issue with retext-spell v6. The spellLoader now returns raw {aff, dic} data, and the ClientGrammarEngine is updated to use this format with proper processor caching. However, a TypeScript error persists, indicating that retext-spell v6 expects either a boolean parameter or an options object with a different structure than the raw {aff, dic} format. Next steps include testing runtime functionality to determine if the error is purely type-related, reviewing the retext-spell v6 documentation for the correct parameter format, and exploring alternatives such as downgrading to retext-spell v5, switching to another spell checking plugin, or manually configuring the dictionary parameter to match the expected structure.\n</info added on 2025-06-20T19:16:04.246Z>\n<info added on 2025-06-20T19:34:34.284Z>\nEnhanced Position Mapping: Now using message.location.start.offset to precisely underline error positions.\n\nExpanded Rule Coverage: Added comprehensive rule plugins including retext-repeated-words for duplicate words, retext-usage for common usage errors, retext-spell for improved spelling detection and ranking, retext-passive for passive voice, and retext-indefinite-article for article usage errors.\n\nImproved Suggestion Ranking: Implemented pickBestSuggestion() helper that prioritizes apostrophe corrections (e.g., suggesting \"don't\" for \"dont\") and enhanced nspell integration with a {max: 10} parameter, resulting in 6–10 high-quality suggestions.\n\nTypeScript and Compatibility Fixes: Resolved dictionary type conflicts with proper casting, replaced deprecated retext-usage require() calls, and eliminated all compilation errors.\n\nEnhanced Test Coverage: Updated test cases now include diverse error types—spelling mistakes (e.g., \"sentance\", \"speling\", \"dont\"), usage (e.g., \"their going\"), incorrect articles (e.g., \"A elephant\"), repeated words (\"and and\", \"is is\"), and passive voice—to ensure robust validation of the hybrid grammar engine.\n</info added on 2025-06-20T19:34:34.284Z>\n<info added on 2025-06-20T20:14:47.062Z>\nFIXED: Browser Import Error – Resolved the 'require is not defined' issue in the browser by replacing the CommonJS require() call for the retext-usage package with a dynamic import. A try-catch mechanism now provides a graceful fallback to a no-op function if the dynamic import fails, and an @ts-ignore suppresses TypeScript warnings related to the deprecated package. This update ensures that all engine functionality—including enhanced position mapping, comprehensive rule coverage (spelling, usage, articles, repeated words, passive voice), improved suggestion ranking, and fast client-side processing—is preserved while achieving full browser compatibility.\n</info added on 2025-06-20T20:14:47.062Z>\n<info added on 2025-06-20T20:19:27.255Z>\nRESOLVED: retext-usage Package Error – The deprecated retext-usage package has been removed from the unified processor pipeline. The package has been fully uninstalled, with all unused imports and variables cleaned up. The active rule set now includes retext-spell for spelling errors, retext-passive for passive voice detection, retext-indefinite-article for article corrections, and retext-repeated-words for duplicate words, along with enhanced position mapping and smart suggestion ranking. The hybrid grammar engine now returns 4–8 suggestions, accurately underlines errors, processes in ~60ms, and functions without triggering browser console errors.\n</info added on 2025-06-20T20:19:27.255Z>",
-            "status": "in-progress"
+            "status": "done"
           },
           {
             "id": 3,
@@ -749,7 +761,7 @@
               1,
               2
             ],
-            "details": "Resolve race conditions and infinite loops, and integrate Web Workers and text chunking for enhanced performance. Establish metrics and logging processes to monitor both cost and system performance.",
+            "details": "Resolve race conditions and infinite loops, and integrate Web Workers and text chunking for enhanced performance. Establish metrics and logging processes to monitor both cost and system performance.\n<info added on 2025-06-20T20:29:15.046Z>\nDependencies updated: Task 14.3 now requires Task 14.7 (Editor Integration) to be completed for effective testing of performance monitoring within the real editor environment.\n</info added on 2025-06-20T20:29:15.046Z>",
             "status": "pending"
           },
           {
@@ -761,15 +773,49 @@
               2,
               3
             ],
-            "details": "Integrate the hybrid routing decision engine with backend modules ensuring seamless handoff between client and server processes. Perform extensive testing to validate concurrency controls, caching improvements, and advanced error handling.",
+            "details": "Integrate the hybrid routing decision engine with backend modules ensuring seamless handoff between client and server processes. Perform extensive testing to validate concurrency controls, caching improvements, and advanced error handling.\n<info added on 2025-06-20T20:29:31.860Z>\nFocus on comprehensive system testing and validation after integrating all components. This phase will assess overall performance, concurrency, caching, and robust error handling. Additionally, ensure that interactions between the hybrid routing decision engine and backend modules are thoroughly validated. Dependencies for this task include tasks 14.3, 14.5, 14.6, and 14.7.\n</info added on 2025-06-20T20:29:31.860Z>",
             "status": "pending"
+          },
+          {
+            "id": 5,
+            "title": "Precise Unicode Position Mapping System",
+            "description": "Implement the PositionMap system from grammar-refactor.md to handle emoji, RTL text, and Unicode normalization for accurate mark placement.",
+            "details": "Create a comprehensive position mapping system that:\n- Builds PositionMap with GraphemeSplitter for cluster-to-unit conversion\n- Handles emoji, RTL scripts, and Unicode normalization (NFC)\n- Maps between grapheme clusters, UTF-16 code units, and byte offsets\n- Ensures marks land precisely on text spans regardless of Unicode complexity\n- Prevents cursor jumping on emoji and Unicode edge cases\n<info added on 2025-06-20T20:42:37.898Z>\nEnhanced implementation of the Unicode Position Mapping System is complete. The new system features an improved PositionMap interface utilizing clusterToUnit and unitToCluster Uint32Arrays, along with a robust CoordinateMapping system (C0, C1, C2 as defined in grammar-refactor.md). Unicode NFC normalization is now applied before processing, ensuring that GraphemeSplitter handles clusters accurately. New conversion methods—utf16ToGrapheme and graphemeToUtf16—along with validateUtf16Range and getDebugInfo functions have been introduced for precise and safe position mapping. Integration updates include revisions to analyzeSuggestions to utilize the enhanced mapping, global exposure of classes (window.UnicodePositionMapper) for testing, and the addition of comprehensive Unicode test cases covering edge cases such as simple text, emoji, RTL scripts, combining characters, smart quotes, and skin tone emoji. A dedicated test UI is available at /test/grammar, and the development server is running on localhost:5173 for real-world validation of all critical Unicode challenges.\n</info added on 2025-06-20T20:42:37.898Z>\n<info added on 2025-06-20T20:53:12.591Z>\nDEBUGGING POSITION ISSUE FOUND:\n• Identified problem with position reporting showing 0-0 due to retext messages not providing expected position data.\n• Introduced comprehensive logging to capture full retext message structures during processing.\n• Updated extraction logic to handle multiple message formats including location, place, position, and direct start/end properties.\n• Next steps: Run tests to review console output for actual message structure, refine position extraction accordingly, and remove debug logs once validation is complete.\n• Note: Legacy engine returning 0 suggestions appears related to API connectivity/configuration and will be addressed after resolving position mapping issues.\n</info added on 2025-06-20T20:53:12.591Z>\n<info added on 2025-06-20T20:57:22.864Z>\nPOSITION MAPPING ISSUE FIXED:\n• Root cause identified: retext messages use the \"place\" property for position data instead of \"location.\"\n• Updated extraction now prioritizes message.place.start.offset and message.place.end.offset with a fallback order of: place → location → position → direct start/end.\n• Debug logging has been removed for clean output.\n• Expected test results: actual text ranges are now reflected for emoji, RTL text, and combining characters.\n• Note: Legacy engine's 0 suggestion issue is likely due to Firebase auth token requirements and is noted for future resolution.\n</info added on 2025-06-20T20:57:22.864Z>",
+            "status": "done",
+            "dependencies": [
+              "14.2"
+            ],
+            "parentTaskId": 14
+          },
+          {
+            "id": 6,
+            "title": "Personal Dictionary System (IndexedDB Storage)",
+            "description": "Implement user-added terms storage using IndexedDB for persistent custom vocabulary and domain-specific words.",
+            "details": "Create a personal dictionary system that:\n- Stores user-added terms in IndexedDB for persistence across sessions\n- Integrates with the client grammar engine to ignore custom terms\n- Provides UI for users to add/remove custom words and phrases\n- Handles domain-specific jargon and technical terms\n- Syncs personal dictionary with user account if authenticated\n- Prevents false positives for legitimate terms the user uses regularly\n<info added on 2025-06-20T20:34:49.716Z>\nInclude a note that Task 14.6 will focus exclusively on implementing the client-side IndexedDB storage mechanism to provide immediate, fast local access to the personal dictionary. Clearly specify that this system is designed to handle instant-term lookups and local persistence, while Task 12 manages the server-side component using Firestore for extended persistence and cross-device synchronization. Emphasize the integration between the two systems to create a cohesive personal dictionary strategy, where fast local checks via IndexedDB complement real-time sync and consistency via Firestore.\n</info added on 2025-06-20T20:34:49.716Z>",
+            "status": "pending",
+            "dependencies": [
+              "14.2"
+            ],
+            "parentTaskId": 14
+          },
+          {
+            "id": 7,
+            "title": "Lexical Editor Integration (Marks & Hover Cards)",
+            "description": "Integrate the hybrid grammar engine with the existing Lexical editor to display grammar marks and hover cards with suggestions.",
+            "details": "Connect the hybrid grammar service to the actual editor interface:\n- Replace useGrammarCheck hook to use HybridGrammarService\n- Update GrammarMarkNode and GrammarPlugin to handle client suggestions\n- Integrate with existing SuggestionHoverCard component\n- Ensure marks appear instantly from client-side processing\n- Add 'AI refining...' UI state for GPT-4o escalations\n- Preserve existing mark styling and interaction patterns\n- Test with real editing scenarios and suggestion applications",
+            "status": "pending",
+            "dependencies": [
+              "14.2",
+              "14.5"
+            ],
+            "parentTaskId": 14
           }
         ]
       }
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-20T19:06:23.736Z",
+      "updated": "2025-06-20T20:44:10.661Z",
       "description": "Tasks for master context"
     }
   }

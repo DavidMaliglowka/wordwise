@@ -16,12 +16,16 @@ const GrammarIntegrationTest: React.FC = () => {
   const editorRef = useRef<LexicalEditorRef>(null);
   const isApplyingMarks = useRef(false);
   const [testText, setTestText] = useState(
-    // Deliberate errors for testing
-    'This is a test document with some grammar errors. She dont like apples, and their going to the store. ' +
-    'A elephant walked by and and the cat was fed by the dog. This is is a repeated word problem. ' +
-    'We need to test the grammar checking system with various types of errors including spelling mistakes, ' +
-    'punctuation errors, and grammatical issues. This sentance has a speling error and dont forget to check there spelling. ' +
-    'We should be able to see these errors highlighted in the editor and interact with them through hover cards.'
+    // Enhanced test text with Unicode edge cases per grammar-refactor.md
+    `This is a test sentance with speling errors. Their going to the store. A elephant is big.
+
+    Unicode edge cases:
+    • Emoji: I 💖 AI and coding! 👍🏽
+    • RTL: שלום, John! Mixed direction text.
+    • Combining: café (é = e + ́ ) vs café (é as single char)
+    • Smart quotes: "Hello" and 'world'
+    • Repeated and and words.
+    • The document was written by the author (passive voice).`
   );
   const [stats, setStats] = useState({
     wordCount: 0,
@@ -30,6 +34,11 @@ const GrammarIntegrationTest: React.FC = () => {
   });
   const [results, setResults] = useState<TestResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [legacyResults, setLegacyResults] = useState<any>(null);
+  const [hybridResults, setHybridResults] = useState<any>(null);
+  const [isTestingLegacy, setIsTestingLegacy] = useState(false);
+  const [isTestingHybrid, setIsTestingHybrid] = useState(false);
+  const [positionMapTest, setPositionMapTest] = useState<any>(null);
 
   const {
     suggestions,
@@ -186,6 +195,41 @@ const GrammarIntegrationTest: React.FC = () => {
     }
 
     setIsLoading(false);
+  };
+
+  const testPositionMapping = () => {
+    try {
+      const testCases = [
+        'Simple text',
+        'I 💖 AI',
+        'שלום, John!',
+        'café vs café',
+        '"Smart quotes"',
+        '👍🏽 skin tone emoji',
+        'e\u0301 combining accent' // e + combining acute accent
+      ];
+
+      const results = testCases.map(text => {
+        const mapper = new (window as any).UnicodePositionMapper(text);
+        const debugInfo = mapper.getDebugInfo();
+
+        return {
+          text,
+          normalizedText: mapper.getNormalizedText(),
+          ...debugInfo,
+          // Test some position conversions
+          firstCharUtf16ToGrapheme: mapper.utf16ToGrapheme(0),
+          firstGraphemeToUtf16: mapper.graphemeToUtf16(0),
+          lastCharUtf16ToGrapheme: mapper.utf16ToGrapheme(text.length - 1),
+          lastGraphemeToUtf16: mapper.graphemeToUtf16(debugInfo.totalGraphemes - 1)
+        };
+      });
+
+      setPositionMapTest(results);
+    } catch (error) {
+      console.error('Position mapping test failed:', error);
+      setPositionMapTest({ error: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   return (
@@ -363,6 +407,73 @@ const GrammarIntegrationTest: React.FC = () => {
             <p>Suggestions Count: {suggestions.length}</p>
             <p>Suggestion Types: {[...new Set(suggestions.map(s => s.type))].join(', ') || 'None'}</p>
           </div>
+        </div>
+
+        {/* Debug Position Test */}
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h3 className="text-lg font-semibold text-yellow-800 mb-2">Debug: Position Mapping Test</h3>
+          <div className="flex gap-4 mb-4">
+            <button
+              onClick={testPositionMapping}
+              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded"
+            >
+              Test Position Mapping
+            </button>
+            <button
+              onClick={async () => {
+                // Simple debug test to see retext message structure
+                const testText = "This is a test sentance.";
+                console.log('=== SIMPLE DEBUG TEST ===');
+                console.log('Input text:', testText);
+
+                try {
+                  const hybridService = (window as any).hybridGrammarService;
+                  if (hybridService) {
+                    const result = await hybridService.checkGrammar(testText);
+                    console.log('Hybrid result:', result);
+                  } else {
+                    console.log('Hybrid service not available on window');
+                  }
+                } catch (error) {
+                  console.error('Debug test failed:', error);
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+            >
+              Debug Message Structure
+            </button>
+          </div>
+
+          {positionMapTest && (
+            <div className="mt-4">
+              <h4 className="font-medium text-yellow-800 mb-2">Position Mapping Results:</h4>
+              {positionMapTest.error ? (
+                <div className="text-red-600 text-sm">{positionMapTest.error}</div>
+              ) : (
+                <div className="space-y-2 text-sm">
+                  {Array.isArray(positionMapTest) ? (
+                    positionMapTest.map((result: any, idx: number) => (
+                      <div key={idx} className="bg-white p-2 rounded border">
+                        <div className="font-mono text-xs">
+                          <div><strong>Text:</strong> "{result.text}"</div>
+                          <div><strong>Normalized:</strong> "{result.normalizedText}"</div>
+                          <div><strong>Graphemes:</strong> {result.totalGraphemes}, <strong>UTF-16:</strong> {result.totalUtf16Units}, <strong>Bytes:</strong> {result.totalBytes}</div>
+                          <div><strong>Position Tests:</strong>
+                            UTF16→Grapheme(0): {result.firstCharUtf16ToGrapheme},
+                            Grapheme→UTF16(0): {result.firstGraphemeToUtf16}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <pre className="text-xs bg-white p-2 rounded border overflow-auto">
+                      {JSON.stringify(positionMapTest, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mt-6 p-4 bg-white rounded-lg shadow-md max-w-4xl mx-auto">
