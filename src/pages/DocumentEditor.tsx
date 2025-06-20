@@ -499,6 +499,12 @@ const DocumentEditor: React.FC = () => {
                 autoSave={true}
                 autoSaveDelay={2000}
                 className="min-h-[500px] sm:min-h-[600px]"
+                // Grammar highlighting props
+                suggestions={suggestions}
+                categorizedSuggestions={categorizedSuggestions}
+                onApplySuggestion={handleApplySuggestion}
+                onDismissSuggestion={handleDismissSuggestion}
+                isApplyingSuggestion={isApplyingSuggestion.current}
               />
             </div>
           </div>

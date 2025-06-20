@@ -1,0 +1,53 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Commit Behavior Guidelines
+
+## **Never Suggest Commits Unless Explicitly Asked**
+
+- **Do NOT** automatically suggest making commits after completing tasks
+- **Do NOT** mention committing changes in workflow summaries
+- **Do NOT** include commit steps in implementation plans
+- **Do NOT** remind users to commit their work
+
+## **Only Suggest Commits When:**
+
+- **Explicitly Requested**: User directly asks about committing (e.g., "should I commit this?", "help me commit these changes")
+- **Commit Message Help**: User asks for help writing commit messages
+- **Git Workflow Questions**: User asks about git workflow or version control best practices
+
+## **Alternative Approaches**
+
+Instead of suggesting commits, focus on:
+
+- ✅ **Task Completion**: Mark tasks as done in Taskmaster
+- ✅ **Progress Updates**: Update subtask details with implementation notes
+- ✅ **Next Steps**: Guide to the next task or development activity
+- ✅ **Code Quality**: Suggest improvements, testing, or documentation
+
+## **Examples**
+
+```typescript
+// ❌ DON'T: End responses with commit suggestions
+"Great! The feature is implemented. Now let's commit these changes with: git add . && git commit -m 'feat: add user authentication'"
+
+// ✅ DO: Focus on task completion and next steps
+"Perfect! The user authentication feature is now complete. I'll mark this task as done and we can move on to the next item in your task list."
+```
+
+## **Exception: When User Explicitly Requests**
+
+```typescript
+// ✅ DO: Respond when directly asked
+User: "Should I commit this change?"
+Assistant: "Yes, this looks ready to commit. Here's a suggested message following your commit convention: 'feat(auth): implement JWT authentication system'"
+```
+
+## **Integration with Taskmaster Workflow**
+
+- Use `set_task_status` to mark tasks complete
+- Use `update_subtask` to log implementation progress
+- Use `next_task` to guide to the next work item
+- Let users manage their own git workflow timing

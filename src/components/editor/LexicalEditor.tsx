@@ -11,9 +11,14 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { ListItemNode, ListNode } from '@lexical/list';
 import { LinkNode, AutoLinkNode } from '@lexical/link';
+import { MarkNode } from '@lexical/mark';
 import { $generateHtmlFromNodes } from '@lexical/html';
 import { $getRoot, EditorState, $createParagraphNode, $createTextNode } from 'lexical';
 import EditorToolbar from './EditorToolbar';
+import { GrammarMarkNode } from './GrammarMarkNode';
+import { GrammarHighlightPlugin } from './GrammarHighlightPlugin';
+import { GrammarHoverPlugin } from './GrammarHoverPlugin';
+import { EditorSuggestion, CategorizedSuggestions } from '../../types/grammar';
 
 export interface EditorStateData {
   content: string;
@@ -36,6 +41,12 @@ interface LexicalEditorProps {
   autoSave?: boolean;
   autoSaveDelay?: number;
   readOnly?: boolean;
+  // Grammar highlighting props
+  suggestions?: EditorSuggestion[];
+  categorizedSuggestions?: CategorizedSuggestions;
+  onApplySuggestion?: (suggestion: EditorSuggestion) => void;
+  onDismissSuggestion?: (suggestionId: string) => void;
+  isApplyingSuggestion?: boolean;
 }
 
 // Hook to initialize content
@@ -193,6 +204,12 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   autoSave = false,
   autoSaveDelay = 2000,
   readOnly = false,
+  // Grammar highlighting props
+  suggestions = [],
+  categorizedSuggestions,
+  onApplySuggestion,
+  onDismissSuggestion,
+  isApplyingSuggestion = false,
 }, ref) => {
   const [updateTrigger, setUpdateTrigger] = React.useState<{ content: string; timestamp: number } | null>(null);
 
@@ -209,6 +226,8 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
       QuoteNode,
       LinkNode,
       AutoLinkNode,
+      MarkNode,
+      GrammarMarkNode,
     ],
     editable: !readOnly,
   };
@@ -289,6 +308,19 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
                 setUpdateTrigger(null);
               }}
             />
+            {/* Grammar highlighting plugins */}
+            <GrammarHighlightPlugin
+              suggestions={suggestions}
+              categorizedSuggestions={categorizedSuggestions || { correctness: [], clarity: [], engagement: [], delivery: [] }}
+              isApplying={isApplyingSuggestion}
+            />
+            {onApplySuggestion && onDismissSuggestion && (
+              <GrammarHoverPlugin
+                suggestions={suggestions}
+                onApplySuggestion={onApplySuggestion}
+                onDismissSuggestion={onDismissSuggestion}
+              />
+            )}
           </div>
           {!readOnly && (
             <div className="fixed bottom-0 left-0 right-0 z-10">

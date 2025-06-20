@@ -29,6 +29,7 @@
     "@lexical/html": "^0.32.1",
     "@lexical/link": "^0.32.1",
     "@lexical/list": "^0.32.1",
+    "@lexical/mark": "^0.32.1",
     "@lexical/plain-text": "^0.32.1",
     "@lexical/react": "^0.32.1",
     "@lexical/rich-text": "^0.32.1",

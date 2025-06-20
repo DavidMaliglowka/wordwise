@@ -61,35 +61,9 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
       return;
     }
 
-    // Normalize text to handle problematic characters
-    const normalizedText = text
-      // Normalize Unicode (decomposed to composed)
-      .normalize('NFC')
-      // Replace smart quotes with regular quotes
-      .replace(/[""]/g, '"')
-      .replace(/['']/g, "'")
-      // Replace em/en dashes with regular hyphens
-      .replace(/[—–]/g, '-')
-      // Replace non-breaking spaces with regular spaces
-      .replace(/\u00A0/g, ' ')
-      // Replace other problematic whitespace characters
-      .replace(/[\u2000-\u200B\u2028\u2029\uFEFF]/g, ' ')
-      // Clean up multiple spaces
-      .replace(/\s+/g, ' ')
-      // Trim
-      .trim();
-
-    // Debug: Log the original and normalized text
-    if (text !== normalizedText) {
-      console.log('🔧 Text normalization applied:');
-      console.log('Original length:', text.length);
-      console.log('Normalized length:', normalizedText.length);
-      console.log('Original (first 100 chars):', JSON.stringify(text.substring(0, 100)));
-      console.log('Normalized (first 100 chars):', JSON.stringify(normalizedText.substring(0, 100)));
-    }
-
-    console.log('🔧 Validating normalized text...');
-    const validation = GrammarService.validateText(normalizedText);
+    // Text is already normalized in checkText, so we can use it directly
+    console.log('🔧 Validating text...');
+    const validation = GrammarService.validateText(text);
     console.log('🔧 Validation result:', validation);
     if (!validation.isValid) {
       console.log('🔧 Validation failed:', validation.error);
@@ -115,7 +89,7 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
 
     try {
             console.log('🔧 Calling GrammarService.checkGrammar with:', {
-        textLength: normalizedText.length,
+        textLength: text.length,
         language: 'en',
         includeSpelling: config.includeSpelling,
         includeGrammar: config.includeGrammar,
@@ -125,7 +99,7 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
 
       // Force no cache to bypass the cached empty result
       const response = await GrammarService.checkGrammar({
-        text: normalizedText,
+        text: text,
         language: 'en',
         includeSpelling: config.includeSpelling,
         includeGrammar: config.includeGrammar,
@@ -138,7 +112,7 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
       if (requestId === currentRequestRef.current) {
         const editorSuggestions = GrammarService.createEditorSuggestions(response.suggestions);
         setSuggestions(editorSuggestions);
-        setLastCheckedText(normalizedText); // Store normalized text
+        setLastCheckedText(text); // Store the text (already normalized)
         setError(null);
         // Reset applied suggestions for new text
         appliedSuggestionsRef.current = [];
@@ -185,8 +159,35 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
       length: text.length,
       firstChars: JSON.stringify(text.substring(0, 50))
     });
+
+    // Normalize text BEFORE debounce comparison to prevent infinite loops
+    const normalizedText = text
+      // Normalize Unicode (decomposed to composed)
+      .normalize('NFC')
+      // Replace smart quotes with regular quotes
+      .replace(/[""]/g, '"')
+      .replace(/['']/g, "'")
+      // Replace em/en dashes with regular hyphens
+      .replace(/[—–]/g, '-')
+      // Replace non-breaking spaces with regular spaces
+      .replace(/\u00A0/g, ' ')
+      // Replace other problematic whitespace characters
+      .replace(/[\u2000-\u200B\u2028\u2029\uFEFF]/g, ' ')
+      // Clean up multiple spaces
+      .replace(/\s+/g, ' ')
+      // Trim
+      .trim();
+
+    // Only log if normalization actually changed the text
+    if (text !== normalizedText) {
+      console.log('🔧 Text normalized before debounce:', {
+        originalLength: text.length,
+        normalizedLength: normalizedText.length
+      });
+    }
+
     setError(null); // Clear previous errors
-    triggerGrammarCheck(text);
+    triggerGrammarCheck(normalizedText); // Pass normalized text to debounce
   }, [triggerGrammarCheck]);
 
   const clearSuggestions = useCallback(() => {
