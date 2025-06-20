@@ -10,6 +10,22 @@ export default defineConfig({
     port: 5173,
     strictPort: true // fail if port 5173 is taken
   },
+  build: {
+    target: 'esnext', // Support top-level await
+    rollupOptions: {
+      output: {
+        format: 'es'
+      }
+    }
+  },
+  esbuild: {
+    target: 'esnext' // Support top-level await in development
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext' // Support top-level await in dependencies
+    }
+  },
   test: {
     globals: true,
     environment: 'happy-dom',

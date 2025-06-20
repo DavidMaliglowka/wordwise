@@ -1,7 +1,16 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { LexicalEditor, LexicalEditorRef } from '../editor';
 import { useGrammarCheck } from '../../hooks/useGrammarCheck';
 import { EditorSuggestion } from '../../types/grammar';
+import { GrammarService } from '../../services/grammar';
+import { HybridGrammarService } from '../../services/grammar-hybrid';
+
+interface TestResult {
+  mode: 'Legacy' | 'Hybrid';
+  suggestions: any[];
+  processingTime: number;
+  error?: string;
+}
 
 const GrammarIntegrationTest: React.FC = () => {
   const editorRef = useRef<LexicalEditorRef>(null);
@@ -19,10 +28,12 @@ const GrammarIntegrationTest: React.FC = () => {
     characterCount: 0,
     isEmpty: true
   });
+  const [results, setResults] = useState<TestResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const {
     suggestions,
-    isLoading,
+    isLoading: grammarCheckLoading,
     error,
     checkText,
     clearSuggestions,
@@ -120,6 +131,63 @@ const GrammarIntegrationTest: React.FC = () => {
     clearSuggestions();
   };
 
+  const runTests = async () => {
+    setIsLoading(true);
+    setResults([]);
+
+    // Test Legacy GPT-4o approach
+    try {
+      const startTime = Date.now();
+      const legacyResponse = await GrammarService.checkGrammar({
+        text: testText,
+        language: 'en',
+        includeSpelling: true,
+        includeGrammar: true,
+        includeStyle: false
+      }, false);  // force no cache for testing
+      const legacyTime = Date.now() - startTime;
+
+      setResults(prev => [...prev, {
+        mode: 'Legacy',
+        suggestions: legacyResponse.suggestions,
+        processingTime: legacyTime
+      }]);
+    } catch (error) {
+      setResults(prev => [...prev, {
+        mode: 'Legacy',
+        suggestions: [],
+        processingTime: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }]);
+    }
+
+    // Test Hybrid approach
+    try {
+      const startTime = Date.now();
+      const hybridResult = await HybridGrammarService.getInstance().checkGrammar(testText, {
+        includeStyle: false,
+        priority: 'balanced',
+        userTier: 'free'
+      });
+      const hybridTime = Date.now() - startTime;
+
+      setResults(prev => [...prev, {
+        mode: 'Hybrid',
+        suggestions: hybridResult.suggestions,
+        processingTime: hybridTime
+      }]);
+    } catch (error) {
+      setResults(prev => [...prev, {
+        mode: 'Hybrid',
+        suggestions: [],
+        processingTime: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }]);
+    }
+
+    setIsLoading(false);
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="bg-white rounded-lg shadow-lg p-6">
@@ -150,11 +218,11 @@ const GrammarIntegrationTest: React.FC = () => {
             </span>
             <div className="h-4 w-px bg-gray-300" />
             <span className={`text-sm ${
-              isLoading ? 'text-blue-600' :
+              grammarCheckLoading ? 'text-blue-600' :
               suggestions.length > 0 ? 'text-amber-600' :
               'text-green-600'
             }`}>
-              {isLoading ? 'Checking grammar...' :
+              {grammarCheckLoading ? 'Checking grammar...' :
                suggestions.length > 0 ? `${suggestions.length} suggestions` :
                'Grammar OK'}
             </span>
@@ -290,10 +358,102 @@ const GrammarIntegrationTest: React.FC = () => {
           <h4 className="font-semibold text-gray-900 mb-2">Debug Information</h4>
           <div className="text-sm text-gray-700 space-y-1">
             <p>Editor Content Length: {testText.length}</p>
-            <p>Is Loading: {isLoading ? 'Yes' : 'No'}</p>
+            <p>Is Loading: {grammarCheckLoading ? 'Yes' : 'No'}</p>
             <p>Error: {error ? error.message : 'None'}</p>
             <p>Suggestions Count: {suggestions.length}</p>
             <p>Suggestion Types: {[...new Set(suggestions.map(s => s.type))].join(', ') || 'None'}</p>
+          </div>
+        </div>
+
+        <div className="mt-6 p-4 bg-white rounded-lg shadow-md max-w-4xl mx-auto">
+          <h2 className="text-2xl font-bold mb-4">Grammar Engine Comparison Test</h2>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Test Text:</label>
+            <textarea
+              value={testText}
+              onChange={(e) => setTestText(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-md h-32"
+              placeholder="Enter text to test grammar checking..."
+            />
+          </div>
+
+          <button
+            onClick={runTests}
+            disabled={isLoading}
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-4 py-2 rounded-md mb-6"
+          >
+            {isLoading ? 'Running Tests...' : 'Run Comparison Test'}
+          </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {results.map((result, index) => (
+              <div key={index} className="border border-gray-200 rounded-lg p-4">
+                <h3 className={`text-lg font-semibold mb-2 ${
+                  result.mode === 'Legacy' ? 'text-orange-600' : 'text-green-600'
+                }`}>
+                  {result.mode} Engine
+                </h3>
+
+                <div className="mb-3">
+                  <span className="text-sm text-gray-600">Processing Time: </span>
+                  <span className={`font-medium ${
+                    result.processingTime < 100 ? 'text-green-600' :
+                    result.processingTime < 1000 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {result.processingTime}ms
+                  </span>
+                </div>
+
+                {result.error ? (
+                  <div className="text-red-600 text-sm mb-3">
+                    Error: {result.error}
+                  </div>
+                ) : (
+                  <div className="mb-3">
+                    <span className="text-sm text-gray-600">Suggestions Found: </span>
+                    <span className="font-medium">{result.suggestions.length}</span>
+                  </div>
+                )}
+
+                <div className="max-h-64 overflow-y-auto">
+                  <h4 className="text-sm font-medium mb-2">Suggestions:</h4>
+                  {result.suggestions.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No suggestions found</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {result.suggestions.map((suggestion, idx) => (
+                        <li key={idx} className="text-sm border-l-2 border-gray-300 pl-3">
+                          <div className="font-medium text-gray-800">
+                            {suggestion.rule || suggestion.type || 'Grammar'}
+                          </div>
+                          <div className="text-gray-600">{suggestion.message}</div>
+                          {suggestion.replacement && (
+                            <div className="text-blue-600">
+                              Suggested: "{suggestion.replacement}"
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-500">
+                            Position: {suggestion.range?.start}-{suggestion.range?.end}
+                            {suggestion.confidence && ` | Confidence: ${Math.round(suggestion.confidence * 100)}%`}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 text-sm text-gray-600">
+            <h4 className="font-medium mb-2">Test Information:</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Legacy: Uses GPT-4o via Cloud Functions (current production approach)</li>
+              <li>Hybrid: Uses client-side processing with optional GPT refinement</li>
+              <li>Performance comparison includes processing time and suggestion quality</li>
+              <li>Test text includes common errors: spelling, grammar, and passive voice</li>
+            </ul>
           </div>
         </div>
       </div>
