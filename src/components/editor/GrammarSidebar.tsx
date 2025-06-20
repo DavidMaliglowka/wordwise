@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, AlertCircle, Lightbulb, Target, MessageSquare, X, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertCircle, Lightbulb, Target, MessageSquare, X, Check, Brain } from 'lucide-react';
 import { CategorizedSuggestions, EditorSuggestion, GrammarCategory } from '../../types/grammar';
 
 interface GrammarSidebarProps {
   categorizedSuggestions: CategorizedSuggestions;
   isLoading: boolean;
+  isRefining?: boolean;
   onApplySuggestion: (suggestion: EditorSuggestion) => void;
   onDismissSuggestion: (suggestionId: string) => void;
+  onRefineSuggestion?: (suggestion: EditorSuggestion) => void;
   onClearAll: () => void;
 }
 
@@ -52,8 +54,10 @@ const categoryConfigs: Record<GrammarCategory, CategoryConfig> = {
 const GrammarSidebar: React.FC<GrammarSidebarProps> = ({
   categorizedSuggestions,
   isLoading,
+  isRefining = false,
   onApplySuggestion,
   onDismissSuggestion,
+  onRefineSuggestion,
   onClearAll
 }) => {
   const [expandedCategories, setExpandedCategories] = useState<Record<GrammarCategory, boolean>>({
@@ -108,6 +112,16 @@ const GrammarSidebar: React.FC<GrammarSidebarProps> = ({
           >
             <Check className="w-3 h-3" />
           </button>
+          {onRefineSuggestion && (
+            <button
+              onClick={() => onRefineSuggestion(suggestion)}
+              disabled={isRefining}
+              className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
+              title="Refine with AI"
+            >
+              <Brain className={`w-3 h-3 ${isRefining ? 'animate-pulse' : ''}`} />
+            </button>
+          )}
           <button
             onClick={() => onDismissSuggestion(suggestion.id)}
             className="p-1 text-gray-400 hover:bg-gray-100 rounded transition-colors"

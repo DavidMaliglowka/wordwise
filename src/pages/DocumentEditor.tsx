@@ -4,11 +4,11 @@ import { LexicalEditor, EditorStateData, LexicalEditorRef } from '../components/
 import GrammarSidebar from '../components/editor/GrammarSidebar';
 import { FirestoreService } from '../services/firestore';
 import { useAuthContext } from '../contexts/AuthContext';
-import { useGrammarCheck } from '../hooks/useGrammarCheck';
+import { useHybridGrammarCheck } from '../hooks/useHybridGrammarCheck';
 import { Document } from '../types/firestore';
 import { EditorSuggestion, CategorizedSuggestions } from '../types/grammar';
 import { GrammarService } from '../services/grammar';
-import { ArrowLeft, Save, Clock } from 'lucide-react';
+import { ArrowLeft, Save, Clock, Zap, Brain } from 'lucide-react';
 
 const DocumentEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,22 +30,25 @@ const DocumentEditor: React.FC = () => {
     isEmpty: true,
   });
 
-  // Grammar checking integration
+  // Hybrid grammar checking integration - faster and more cost-effective!
   const {
     suggestions,
     isLoading: isGrammarLoading,
+    isRefining: isGrammarRefining,
     error: grammarError,
     checkText: checkGrammar,
     clearSuggestions,
     dismissSuggestion,
     applySuggestion,
-    retryLastCheck
-  } = useGrammarCheck({
-    delay: 1000,
+    refineSuggestion,
+    retryLastCheck,
+    stats
+  } = useHybridGrammarCheck({
+    delay: 300, // Faster debounce for hybrid approach
     minLength: 3,
     includeSpelling: true,
     includeGrammar: true,
-    includeStyle: false,
+    includeStyle: true, // Enable style suggestions with hybrid
     enableCache: true
   });
 
@@ -56,7 +59,7 @@ const DocumentEditor: React.FC = () => {
 
     // Handle applying a suggestion
   const handleApplySuggestion = useCallback((suggestion: EditorSuggestion) => {
-    console.log('🔧 APPLY DEBUG: Starting suggestion application', {
+    console.log('🔧 HYBRID APPLY DEBUG: Starting suggestion application', {
       suggestionId: suggestion.id,
       original: suggestion.original,
       proposed: suggestion.proposed,
@@ -64,14 +67,11 @@ const DocumentEditor: React.FC = () => {
       timestamp: new Date().toISOString()
     });
 
-    // Add stack trace to see where this is being called from
-    console.trace('📍 APPLY DEBUG: Call stack for handleApplySuggestion');
-
     try {
       const result = applySuggestion(suggestion.id, editorState.content);
 
       if (result && editorRef.current) {
-        console.log('🔧 APPLY DEBUG: Suggestion applied successfully', {
+        console.log('🔧 HYBRID APPLY DEBUG: Suggestion applied successfully', {
           oldTextLength: editorState.content.length,
           newTextLength: result.newText.length,
           textChanged: result.newText !== editorState.content
@@ -79,7 +79,6 @@ const DocumentEditor: React.FC = () => {
 
         // Set flag to prevent grammar checking during programmatic update
         isApplyingSuggestion.current = true;
-        console.log('🔧 APPLY DEBUG: Set isApplyingSuggestion flag to true');
 
         // Update the actual Lexical editor content
         editorRef.current.updateContent(result.newText);
@@ -99,30 +98,45 @@ const DocumentEditor: React.FC = () => {
 
         // Reset flag and trigger new grammar check after content is updated
         setTimeout(() => {
-          console.log('🔧 APPLY DEBUG: Resetting flag and triggering recheck');
+          console.log('🔧 HYBRID APPLY DEBUG: Resetting flag and triggering recheck');
           isApplyingSuggestion.current = false;
 
           // Trigger a fresh grammar check to update marks for the new content
           if (result.newText && result.newText.trim().length > 0) {
-            console.log('🔄 APPLY DEBUG: Triggering grammar recheck after suggestion application');
+            console.log('🔄 HYBRID APPLY DEBUG: Triggering grammar recheck after suggestion application');
             checkGrammar(result.newText);
           } else {
-            console.log('🧹 APPLY DEBUG: Clearing suggestions - no content remaining');
+            console.log('🧹 HYBRID APPLY DEBUG: Clearing suggestions - no content remaining');
             clearSuggestions();
           }
-        }, 200); // Increased delay to ensure editor is fully updated
+        }, 100); // Faster for hybrid approach
       } else {
-        console.error('🚨 APPLY DEBUG: Failed to apply suggestion or no editor ref', {
+        console.error('🚨 HYBRID APPLY DEBUG: Failed to apply suggestion or no editor ref', {
           hasResult: !!result,
           hasEditorRef: !!editorRef.current
         });
       }
     } catch (error) {
-      console.error('🚨 APPLY DEBUG: Error in handleApplySuggestion:', error);
+      console.error('🚨 HYBRID APPLY DEBUG: Error in handleApplySuggestion:', error);
       // Reset flag in case of error
       isApplyingSuggestion.current = false;
     }
   }, [applySuggestion, editorState.content, checkGrammar, clearSuggestions]);
+
+  // Handle refining a suggestion with GPT-4o
+  const handleRefineSuggestion = useCallback(async (suggestion: EditorSuggestion) => {
+    console.log('✨ REFINE DEBUG: Starting GPT-4o refinement', {
+      suggestionId: suggestion.id,
+      original: suggestion.original
+    });
+
+    try {
+      await refineSuggestion(suggestion.id);
+      console.log('✅ REFINE DEBUG: Refinement completed successfully');
+    } catch (error) {
+      console.error('❌ REFINE DEBUG: Refinement failed:', error);
+    }
+  }, [refineSuggestion]);
 
   // Handle dismissing a suggestion
   const handleDismissSuggestion = useCallback((suggestionId: string) => {
@@ -131,7 +145,7 @@ const DocumentEditor: React.FC = () => {
 
   // Handle clicking on a grammar mark (should NOT auto-apply)
   const handleGrammarMarkClick = useCallback((suggestion: EditorSuggestion) => {
-    console.log('🖱️ CLICK DEBUG: DocumentEditor handleGrammarMarkClick called', {
+    console.log('🖱️ HYBRID CLICK DEBUG: DocumentEditor handleGrammarMarkClick called', {
       suggestionId: suggestion.id,
       suggestionText: suggestion.original,
       suggestionProposed: suggestion.proposed,
@@ -140,10 +154,7 @@ const DocumentEditor: React.FC = () => {
 
     // Just log the click - don't auto-apply the suggestion
     // The hover card should handle showing details and user can choose to apply
-    console.log('✅ CLICK DEBUG: Click handled - no auto-apply triggered');
-
-    // Add a stack trace to see where this is being called from
-    console.trace('📍 CLICK DEBUG: Call stack for handleGrammarMarkClick');
+    console.log('✅ HYBRID CLICK DEBUG: Click handled - no auto-apply triggered');
   }, []);
 
   // Handle clearing all suggestions
@@ -153,13 +164,13 @@ const DocumentEditor: React.FC = () => {
 
   // Handle mark application start
   const handleMarkApplicationStart = useCallback(() => {
-    console.log('🔧 Mark application started - blocking grammar checks');
+    console.log('🔧 Hybrid mark application started - blocking grammar checks');
     isApplyingMarks.current = true;
   }, []);
 
   // Handle mark application end
   const handleMarkApplicationEnd = useCallback(() => {
-    console.log('🔧 Mark application ended - allowing grammar checks');
+    console.log('🔧 Hybrid mark application ended - allowing grammar checks');
     isApplyingMarks.current = false;
   }, []);
 
@@ -469,13 +480,24 @@ const DocumentEditor: React.FC = () => {
               <span>{editorState.wordCount} words</span>
               <span className="mx-2">•</span>
               <span>{editorState.characterCount} characters</span>
-                            {/* Grammar checking status */}
+                            {/* Hybrid Grammar checking status */}
               <span className="mx-2">•</span>
               <span className={`${isGrammarLoading ? 'text-blue-600' : suggestions.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                {isGrammarLoading ? 'Checking grammar...' :
-                 suggestions.length > 0 ? (
+                {isGrammarLoading ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Zap className="w-3 h-3" />
+                    <span>Analyzing...</span>
+                  </span>
+                ) : isGrammarRefining ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Brain className="w-3 h-3 animate-pulse" />
+                    <span>AI refining...</span>
+                  </span>
+                ) : suggestions.length > 0 ? (
                    <span className="inline-flex items-center gap-1">
+                     <Zap className="w-3 h-3" />
                      <span>{suggestions.length} suggestions</span>
+                     <span className="text-xs text-gray-500">({stats.totalProcessingTime.toFixed(0)}ms)</span>
                      {categorizedSuggestions.correctness.length > 0 && (
                        <span className="text-xs bg-red-100 text-red-700 px-1 rounded">
                          {categorizedSuggestions.correctness.length} errors
@@ -588,8 +610,10 @@ const DocumentEditor: React.FC = () => {
         <GrammarSidebar
           categorizedSuggestions={categorizedSuggestions}
           isLoading={isGrammarLoading}
+          isRefining={isGrammarRefining}
           onApplySuggestion={handleApplySuggestion}
           onDismissSuggestion={handleDismissSuggestion}
+          onRefineSuggestion={handleRefineSuggestion}
           onClearAll={handleClearAllSuggestions}
         />
       </div>
