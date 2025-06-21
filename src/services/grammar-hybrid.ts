@@ -267,19 +267,36 @@ export class ClientGrammarEngine {
   private async getProcessor() {
     if (this.processor) return this.processor;
 
-    this.dict = await getHunspellDict();
-    this.spellChecker = await import('nspell').then(m => m.default(this.dict));
+    console.log('🔧 Initializing grammar processor...');
 
-    this.processor = unified()
-      .use(retextEnglish)
-      .use(retextSpell, this.dict as any) // Cast to avoid TypeScript error
-      .use(retextPassive)
-      .use(retextIndefiniteArticle)
-      .use(retextRepeatedWords)
-      // Note: retext-usage removed due to internal errors (deprecated package)
-      .use(retextStringify);
+    try {
+      console.log('📚 Loading Hunspell dictionary...');
+      this.dict = await getHunspellDict();
+      console.log('✅ Dictionary loaded successfully:', {
+        affSize: this.dict.aff.length,
+        dicSize: this.dict.dic.length
+      });
 
-    return this.processor;
+      console.log('🔤 Creating spell checker...');
+      this.spellChecker = await import('nspell').then(m => m.default(this.dict));
+      console.log('✅ Spell checker created');
+
+      console.log('⚙️ Setting up retext processor...');
+      this.processor = unified()
+        .use(retextEnglish)
+        .use(retextSpell, this.dict as any) // Cast to avoid TypeScript error
+        .use(retextPassive)
+        .use(retextIndefiniteArticle)
+        .use(retextRepeatedWords)
+        // Note: retext-usage removed due to internal errors (deprecated package)
+        .use(retextStringify);
+
+      console.log('✅ Retext processor configured');
+      return this.processor;
+    } catch (error) {
+      console.error('❌ Failed to initialize grammar processor:', error);
+      throw error;
+    }
   }
 
   async initialize(): Promise<void> {
@@ -306,9 +323,26 @@ export class ClientGrammarEngine {
     const normalizedText = unorm.nfc(text);
     const positionMapper = new UnicodePositionMapper(normalizedText);
 
+    console.log(`🔍 Analyzing text: "${text}" (normalized: "${normalizedText}")`);
+
     try {
       const processor = await this.getProcessor();
       const file = await processor.process(normalizedText);
+
+      console.log(`📝 Retext processing complete. Messages found: ${file.messages.length}`);
+
+      if (file.messages.length > 0) {
+        console.log('Raw retext messages:', file.messages.map((m: any) => ({
+          source: m.source,
+          message: m.message || m.reason,
+          ruleId: m.ruleId,
+          place: m.place,
+          location: m.location,
+          position: m.position,
+          expected: m.expected,
+          actual: m.actual
+        })));
+      }
 
       const suggestions = file.messages.map((message: any) => {
         // Extract position information from retext message
@@ -355,7 +389,7 @@ export class ClientGrammarEngine {
           replacement = this.pickBestSuggestion(flaggedText, suggestions);
         }
 
-        return {
+        const suggestion = {
           id: nanoid(),
           rule: message.source || message.ruleId || 'unknown',
           message: message.reason || message.message || 'Grammar issue detected',
@@ -366,13 +400,22 @@ export class ClientGrammarEngine {
           confidence,
           flaggedText // Include the flagged text for personal dictionary filtering
         };
+
+        console.log(`💡 Created suggestion:`, suggestion);
+        return suggestion;
       });
 
+      console.log(`✅ Generated ${suggestions.length} suggestions before filtering`);
+
       // Filter out suggestions for words in the personal dictionary
-      return this.filterPersonalDictionaryWords(suggestions);
+      const filteredSuggestions = await this.filterPersonalDictionaryWords(suggestions);
+
+      console.log(`🔄 After personal dictionary filtering: ${filteredSuggestions.length} suggestions`);
+
+      return filteredSuggestions;
 
     } catch (error) {
-      console.error('Client grammar analysis failed:', error);
+      console.error('❌ Client grammar analysis failed:', error);
       return [];
     }
   }
