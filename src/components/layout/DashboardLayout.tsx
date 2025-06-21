@@ -8,8 +8,10 @@ import {
   QuestionMarkCircleIcon,
   ArrowRightOnRectangleIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
+import { PerformanceMonitorDashboard } from '../PerformanceMonitorDashboard';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -18,6 +20,7 @@ interface DashboardLayoutProps {
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { user, signOut } = useAuthContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
 
   const navigation = [
     { name: 'Documents', icon: DocumentTextIcon, href: '/documents', current: true },
@@ -71,6 +74,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           navigation={navigation}
           user={user}
           onSignOut={handleSignOut}
+          onShowPerformance={() => setShowPerformanceDashboard(true)}
         />
       </div>
 
@@ -90,6 +94,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             navigation={navigation}
             user={user}
             onSignOut={handleSignOut}
+            onShowPerformance={() => setShowPerformanceDashboard(true)}
           />
         </div>
       </div>
@@ -119,6 +124,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           {children}
         </main>
       </div>
+
+      {/* Performance Monitor Dashboard */}
+      {showPerformanceDashboard && (
+        <PerformanceMonitorDashboard
+          onClose={() => setShowPerformanceDashboard(false)}
+        />
+      )}
     </div>
   );
 };
@@ -133,9 +145,10 @@ interface SidebarContentProps {
   }>;
   user: any;
   onSignOut: () => void;
+  onShowPerformance: () => void;
 }
 
-const SidebarContent: React.FC<SidebarContentProps> = ({ navigation, user, onSignOut }) => {
+const SidebarContent: React.FC<SidebarContentProps> = ({ navigation, user, onSignOut, onShowPerformance }) => {
   return (
     <div className="flex flex-1 flex-col">
       {/* Navigation */}
@@ -188,13 +201,22 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ navigation, user, onSig
           >
             <QuestionMarkCircleIcon className="h-5 w-5" />
           </button>
-          <button
-            onClick={onSignOut}
-            className="flex items-center text-gray-400 hover:text-gray-500 transition-colors"
-            title="Sign out"
-          >
-            <ArrowRightOnRectangleIcon className="h-5 w-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={onShowPerformance}
+              className="flex items-center text-gray-400 hover:text-gray-500 transition-colors"
+              title="Performance Monitor"
+            >
+              <ChartBarIcon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={onSignOut}
+              className="flex items-center text-gray-400 hover:text-gray-500 transition-colors"
+              title="Sign out"
+            >
+              <ArrowRightOnRectangleIcon className="h-5 w-5" />
+            </button>
+          </div>
         </div>
         {user && (
           <div className="mt-3 flex items-center">

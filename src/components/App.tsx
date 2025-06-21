@@ -6,6 +6,7 @@ import DocumentsDashboard from '../pages/DocumentsDashboard';
 import DocumentEditor from '../pages/DocumentEditor';
 import GrammarTestPage from '../pages/GrammarTestPage';
 import HybridGrammarTest from './test/HybridGrammarTest';
+import PerformanceMonitorTest from './test/PerformanceMonitorTest';
 
 // Protected route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -85,6 +86,14 @@ const AppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <HybridGrammarTest />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/test/performance"
+          element={
+            <ProtectedRoute>
+              <PerformanceMonitorTest />
             </ProtectedRoute>
           }
         />

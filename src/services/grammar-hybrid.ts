@@ -11,6 +11,8 @@ import { nanoid } from 'nanoid';
 import { auth } from '../lib/firebase';
 import { getHunspellDict, type HunspellDict } from '../utils/spellLoader';
 import { personalDictionary } from './personal-dictionary';
+import { performanceMonitor } from './performance-monitor';
+import { grammarCache } from './enhanced-cache';
 
 // retext-usage removed due to deprecation and internal errors
 
@@ -431,49 +433,178 @@ export class HybridGrammarService {
     decision: ProcessingDecision;
   }> {
     const startTime = Date.now();
+    const userId = auth.currentUser?.uid;
+    const userTier = options.userTier || 'free';
+    let errorOccurred = false;
+    let errorType: string | undefined;
+
+    // Check cache first
+    const cacheKey = grammarCache.generateGrammarKey(text, options);
+    const cachedResult = grammarCache.getGrammarResult(text, options);
+
+    if (cachedResult) {
+      const processingTime = Date.now() - startTime;
+
+      // Record performance metrics for cache hit
+      performanceMonitor.recordPerformanceMetric({
+        userId,
+        processingMode: cachedResult.processingMode,
+        textLength: text.length,
+        wordCount: text.split(/\s+/).length,
+        processingTimeMs: processingTime,
+        suggestionsCount: cachedResult.suggestions.length,
+        cached: true,
+        cacheHit: true,
+        estimatedCost: 0,
+        actualCost: 0,
+        userTier,
+        errorOccurred: false
+      });
+
+      return {
+        ...cachedResult,
+        processingTimeMs: processingTime
+      };
+    }
 
     // Make processing decision
     const decision = GrammarDecisionEngine.analyzeProcessingNeeds(text, options);
+
+    // Record cost metrics for the decision
+    performanceMonitor.recordCostMetric({
+      userId,
+      provider: decision.useClientOnly ? 'client' : 'openai',
+      cost: decision.estimatedCost,
+      currency: 'USD',
+      userTier,
+      rateLimitHit: false,
+      costThresholdExceeded: false
+    });
 
     try {
       if (decision.useClientOnly) {
         // Client-only processing
         const suggestions = await this.clientEngine.analyzeSuggestions(text);
 
-        return {
-          suggestions,
+        const processingTime = Date.now() - startTime;
+
+        // Record performance metrics
+        performanceMonitor.recordPerformanceMetric({
+          userId,
           processingMode: 'client',
-          processingTimeMs: Date.now() - startTime,
+          textLength: text.length,
+          wordCount: text.split(/\s+/).length,
+          processingTimeMs: processingTime,
+          suggestionsCount: suggestions.length,
+          cached: false,
+          estimatedCost: decision.estimatedCost,
+          actualCost: 0, // Client processing is free
+          userTier,
+          errorOccurred: false
+        });
+
+        const result = {
+          suggestions,
+          processingMode: 'client' as const,
+          processingTimeMs: processingTime,
           decision
         };
+
+        // Cache the result
+        grammarCache.setGrammarResult(text, options, result);
+
+        return result;
       } else {
         // Hybrid processing: client first, then GPT enhancement
         const clientSuggestions = await this.clientEngine.analyzeSuggestions(text);
 
-        // TODO: Implement GPT enhancement for style suggestions
-        // For now, return client suggestions
-        return {
-          suggestions: clientSuggestions,
+        const processingTime = Date.now() - startTime;
+
+        // Record performance metrics for hybrid mode
+        performanceMonitor.recordPerformanceMetric({
+          userId,
           processingMode: 'hybrid',
-          processingTimeMs: Date.now() - startTime,
+          textLength: text.length,
+          wordCount: text.split(/\s+/).length,
+          processingTimeMs: processingTime,
+          suggestionsCount: clientSuggestions.length,
+          cached: false,
+          estimatedCost: decision.estimatedCost,
+          actualCost: decision.estimatedCost, // For hybrid, we use the estimate
+          userTier,
+          errorOccurred: false
+        });
+
+        const result = {
+          suggestions: clientSuggestions,
+          processingMode: 'hybrid' as const,
+          processingTimeMs: processingTime,
           decision
         };
+
+        // Cache the result
+        grammarCache.setGrammarResult(text, options, result);
+
+        // TODO: Implement GPT enhancement for style suggestions
+        // For now, return client suggestions
+        return result;
       }
     } catch (error) {
       console.error('Hybrid grammar check failed:', error);
+      errorOccurred = true;
+      errorType = error instanceof Error ? error.name : 'UnknownError';
 
       // Fallback to client-only processing
-      const suggestions = await this.clientEngine.analyzeSuggestions(text);
+      try {
+        const suggestions = await this.clientEngine.analyzeSuggestions(text);
+        const processingTime = Date.now() - startTime;
 
-      return {
-        suggestions,
-        processingMode: 'client',
-        processingTimeMs: Date.now() - startTime,
-        decision: {
-          ...decision,
-          reason: 'Fallback to client processing due to error'
-        }
-      };
+        // Record performance metrics for fallback
+        performanceMonitor.recordPerformanceMetric({
+          userId,
+          processingMode: 'client',
+          textLength: text.length,
+          wordCount: text.split(/\s+/).length,
+          processingTimeMs: processingTime,
+          suggestionsCount: suggestions.length,
+          cached: false,
+          estimatedCost: 0,
+          actualCost: 0,
+          userTier,
+          errorOccurred: true,
+          errorType
+        });
+
+        return {
+          suggestions,
+          processingMode: 'client',
+          processingTimeMs: processingTime,
+          decision: {
+            ...decision,
+            reason: 'Fallback to client processing due to error'
+          }
+        };
+      } catch (fallbackError) {
+        const processingTime = Date.now() - startTime;
+
+        // Record complete failure
+        performanceMonitor.recordPerformanceMetric({
+          userId,
+          processingMode: 'client',
+          textLength: text.length,
+          wordCount: text.split(/\s+/).length,
+          processingTimeMs: processingTime,
+          suggestionsCount: 0,
+          cached: false,
+          estimatedCost: 0,
+          actualCost: 0,
+          userTier,
+          errorOccurred: true,
+          errorType: 'FallbackFailure'
+        });
+
+        throw fallbackError;
+      }
     }
   }
 }
