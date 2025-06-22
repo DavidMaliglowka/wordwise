@@ -50,3 +50,10 @@ export interface OpenAIStreamChunk {
     finish_reason?: string;
   }>;
 }
+
+export interface FeatureFlags {
+  testRoutes: boolean;
+  performanceMonitor: boolean;
+  updatedAt?: FirebaseFirestore.Timestamp;
+  updatedBy?: string;
+}

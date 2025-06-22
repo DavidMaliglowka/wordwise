@@ -8,6 +8,9 @@ import GrammarTestPage from '../pages/GrammarTestPage';
 import HybridGrammarTest from './test/HybridGrammarTest';
 import PerformanceMonitorTest from './test/PerformanceMonitorTest';
 import SystemIntegrationTest from './test/SystemIntegrationTest';
+import AdminPanel from './test/AdminPanel';
+import AdminDebug from './test/AdminDebug';
+import { AdminRoute } from './AdminRoute';
 
 // Protected route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -77,35 +80,53 @@ const AppContent: React.FC = () => {
         <Route
           path="/test/grammar"
           element={
-            <ProtectedRoute>
+            <AdminRoute feature="testRoutes">
               <GrammarTestPage />
-            </ProtectedRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/test/hybrid"
           element={
-            <ProtectedRoute>
+            <AdminRoute feature="testRoutes">
               <HybridGrammarTest />
-            </ProtectedRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/test/performance"
           element={
-            <ProtectedRoute>
+            <AdminRoute feature="testRoutes">
               <PerformanceMonitorTest />
-            </ProtectedRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/test/integration"
           element={
-            <ProtectedRoute>
+            <AdminRoute feature="testRoutes">
               <SystemIntegrationTest />
+            </AdminRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPanel />
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin-debug"
+          element={
+            <ProtectedRoute>
+              <AdminDebug />
+            </ProtectedRoute>
+          }
+        />
+
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/auth" replace />} />
       </Routes>

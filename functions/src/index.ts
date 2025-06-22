@@ -630,3 +630,161 @@ export const checkGrammar = onRequest({
     return sendError(res, 500, "Internal server error", error.message, req);
   }
 });
+
+
+
+/**
+ * Verify if user is admin (checks admin field in users collection)
+ */
+async function verifyAdmin(req: any): Promise<string> {
+  const uid = await verifyAuth(req);
+
+  // Check admin field in users collection
+  const userDoc = await admin.firestore().collection('users').doc(uid).get();
+
+  if (!userDoc.exists) {
+    throw new Error('FORBIDDEN');
+  }
+
+  const userData = userDoc.data();
+  if (!userData?.admin) {
+    throw new Error('FORBIDDEN');
+  }
+
+  return uid;
+}
+
+/**
+ * Get feature flags (admin only)
+ * GET /getFeatureFlags
+ */
+export const getFeatureFlags = onRequest({
+  invoker: 'public'
+}, async (req, res) => {
+  try {
+    setCorsHeaders(res, req);
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== "GET") {
+      return sendError(res, 405, "Method not allowed", null, req);
+    }
+
+    // Verify admin authentication
+    const uid = await verifyAdmin(req);
+
+    // Get feature flags from Firestore
+    const featureFlagsRef = db.collection('admin').doc('featureFlags');
+    const doc = await featureFlagsRef.get();
+
+    let featureFlags = {
+      testRoutes: false,
+      performanceMonitor: false
+    };
+
+    if (doc.exists) {
+      const data = doc.data();
+      featureFlags = { ...featureFlags, ...data };
+    }
+
+    // In production, force disable all development features
+    if (process.env.NODE_ENV === 'production') {
+      featureFlags.testRoutes = false;
+      featureFlags.performanceMonitor = false;
+    }
+
+    logger.info(`Feature flags retrieved by admin: ${uid}`);
+
+    res.status(200).json({
+      success: true,
+      flags: featureFlags
+    });
+
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") {
+      return sendError(res, 401, "Unauthorized", null, req);
+    }
+    if (error.message === "FORBIDDEN") {
+      return sendError(res, 403, "Admin access required", null, req);
+    }
+    return sendError(res, 500, "Internal server error", error.message, req);
+  }
+});
+
+/**
+ * Update feature flags (admin only)
+ * POST /updateFeatureFlags
+ */
+export const updateFeatureFlags = onRequest({
+  invoker: 'public'
+}, async (req, res) => {
+  try {
+    setCorsHeaders(res, req);
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== "POST") {
+      return sendError(res, 405, "Method not allowed", null, req);
+    }
+
+    // Verify admin authentication
+    const uid = await verifyAdmin(req);
+
+    // Validate request body
+    const { flags } = req.body;
+
+    if (!flags || (typeof flags.testRoutes !== 'boolean' && typeof flags.performanceMonitor !== 'boolean')) {
+      return sendError(res, 400, "Invalid request data - must include flags.testRoutes or flags.performanceMonitor", null, req);
+    }
+
+    // In production, reject any attempt to enable development features
+    if (process.env.NODE_ENV === 'production') {
+      if (flags.testRoutes || flags.performanceMonitor) {
+        return sendError(res, 403, "Cannot enable development features in production", null, req);
+      }
+    }
+
+    // Update feature flags in Firestore
+    const featureFlagsRef = db.collection('admin').doc('featureFlags');
+
+    const updateData: any = {
+      updatedAt: new Date(),
+      updatedBy: uid
+    };
+
+    if (flags.testRoutes !== undefined) {
+      updateData.testRoutes = flags.testRoutes;
+    }
+
+    if (flags.performanceMonitor !== undefined) {
+      updateData.performanceMonitor = flags.performanceMonitor;
+    }
+
+    await featureFlagsRef.set(updateData, { merge: true });
+
+    logger.info(`Feature flags updated by admin: ${uid}`, updateData);
+
+    res.status(200).json({
+      success: true,
+      message: "Feature flags updated successfully",
+      data: updateData
+    });
+
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") {
+      return sendError(res, 401, "Unauthorized", null, req);
+    }
+    if (error.message === "FORBIDDEN") {
+      return sendError(res, 403, "Admin access required", null, req);
+    }
+    return sendError(res, 500, "Internal server error", error.message, req);
+  }
+});

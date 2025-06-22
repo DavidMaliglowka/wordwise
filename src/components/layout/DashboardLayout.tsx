@@ -3,7 +3,6 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import {
   DocumentTextIcon,
   ClockIcon,
-  TrashIcon,
   UserCircleIcon,
   QuestionMarkCircleIcon,
   ArrowRightOnRectangleIcon,
@@ -12,6 +11,8 @@ import {
   ChartBarIcon
 } from '@heroicons/react/24/outline';
 import { PerformanceMonitorDashboard } from '../PerformanceMonitorDashboard';
+import { AdminFeature } from '../AdminRoute';
+import ComingSoonModal from '../ComingSoonModal';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -21,11 +22,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { user, signOut } = useAuthContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
+  const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false);
+  const [showGetProModal, setShowGetProModal] = useState(false);
 
   const navigation = [
     { name: 'Documents', icon: DocumentTextIcon, href: '/documents', current: true },
-    { name: 'Version History', icon: ClockIcon, href: '/history', current: false },
-    { name: 'Trash', icon: TrashIcon, href: '/trash', current: false },
+    { name: 'Version History', icon: ClockIcon, href: null, current: false, onClick: () => setShowVersionHistoryModal(true) },
     { name: 'Account', icon: UserCircleIcon, href: '/account', current: false },
   ];
 
@@ -75,6 +77,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           user={user}
           onSignOut={handleSignOut}
           onShowPerformance={() => setShowPerformanceDashboard(true)}
+          onShowGetProModal={() => setShowGetProModal(true)}
         />
       </div>
 
@@ -95,6 +98,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             user={user}
             onSignOut={handleSignOut}
             onShowPerformance={() => setShowPerformanceDashboard(true)}
+            onShowGetProModal={() => setShowGetProModal(true)}
           />
         </div>
       </div>
@@ -127,10 +131,28 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
       {/* Performance Monitor Dashboard */}
       {showPerformanceDashboard && (
-        <PerformanceMonitorDashboard
-          onClose={() => setShowPerformanceDashboard(false)}
-        />
+        <AdminFeature feature="performanceMonitor">
+          <PerformanceMonitorDashboard
+            onClose={() => setShowPerformanceDashboard(false)}
+          />
+        </AdminFeature>
       )}
+
+      {/* Version History Modal - Task 21 */}
+      <ComingSoonModal
+        isOpen={showVersionHistoryModal}
+        onClose={() => setShowVersionHistoryModal(false)}
+        featureName="Version History"
+        customMessage="Version control and document history tracking is currently in development. This feature will allow you to view and restore previous versions of your documents."
+      />
+
+      {/* Get Pro Modal - Task 21 */}
+      <ComingSoonModal
+        isOpen={showGetProModal}
+        onClose={() => setShowGetProModal(false)}
+        featureName="Pro Upgrade"
+        customMessage="Premium features including superior AI, unlimited documents, and priority support are coming soon!"
+      />
     </div>
   );
 };
@@ -140,51 +162,82 @@ interface SidebarContentProps {
   navigation: Array<{
     name: string;
     icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-    href: string;
+    href: string | null;
     current: boolean;
+    onClick?: () => void;
   }>;
   user: any;
   onSignOut: () => void;
   onShowPerformance: () => void;
+  onShowGetProModal?: () => void;
 }
 
-const SidebarContent: React.FC<SidebarContentProps> = ({ navigation, user, onSignOut, onShowPerformance }) => {
+const SidebarContent: React.FC<SidebarContentProps> = ({
+  navigation,
+  user,
+  onSignOut,
+  onShowPerformance,
+  onShowGetProModal
+}) => {
   return (
     <div className="flex flex-1 flex-col">
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-6">
-        {navigation.map((item) => (
-          <a
-            key={item.name}
-            href={item.href}
-            className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              item.current
-                ? 'bg-gray-100 text-gray-900 border-l-4 border-indigo-600'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
-          >
-            <item.icon
-              className={`mr-3 h-5 w-5 flex-shrink-0 ${
-                item.current ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'
-              }`}
-            />
-            {item.name}
-            {item.name === 'Apps' && (
-              <span className="ml-auto bg-indigo-100 text-indigo-600 py-0.5 px-2 rounded-full text-xs font-medium">
-                3
-              </span>
-            )}
-          </a>
-        ))}
+        {navigation.map((item) => {
+          // If item has onClick handler, render as button
+          if (item.onClick) {
+            return (
+              <button
+                key={item.name}
+                onClick={item.onClick}
+                className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors w-full text-left ${
+                  item.current
+                    ? 'bg-gray-100 text-gray-900 border-l-4 border-indigo-600'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon
+                  className={`mr-3 h-5 w-5 flex-shrink-0 ${
+                    item.current ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'
+                  }`}
+                />
+                {item.name}
+              </button>
+            );
+          }
 
-        {/* Get Pro CTA */}
+          // Otherwise render as regular link
+          return (
+            <a
+              key={item.name}
+              href={item.href || '#'}
+              className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                item.current
+                  ? 'bg-gray-100 text-gray-900 border-l-4 border-indigo-600'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <item.icon
+                className={`mr-3 h-5 w-5 flex-shrink-0 ${
+                  item.current ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'
+                }`}
+              />
+              {item.name}
+            </a>
+          );
+        })}
+
+        {/* Get Pro CTA - updated to trigger modal for Task 21 */}
         <div className="mt-6">
           <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg p-4 text-white">
             <h4 className="text-sm font-semibold">Upgrade to Pro</h4>
             <p className="text-xs mt-1 opacity-90">
               Unlock advanced AI features and unlimited documents
             </p>
-            <button className="mt-3 w-full bg-white text-indigo-600 rounded-md px-3 py-2 text-sm font-medium hover:bg-gray-50 transition-colors">
+            <button
+              onClick={onShowGetProModal}
+              className="mt-3 w-full bg-white text-indigo-600 rounded-md px-3 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
               Get Pro
             </button>
           </div>
@@ -194,21 +247,24 @@ const SidebarContent: React.FC<SidebarContentProps> = ({ navigation, user, onSig
       {/* Footer */}
       <div className="flex-shrink-0 border-t border-gray-200 p-4">
         <div className="flex items-center justify-between">
-          <button
-            type="button"
+          {/* Support email link - updated as per Task 20 */}
+          <a
+            href="mailto:david@maliglow.com"
             className="flex items-center text-gray-400 hover:text-gray-500 transition-colors"
-            title="Support"
+            title="Support - Contact us"
           >
             <QuestionMarkCircleIcon className="h-5 w-5" />
-          </button>
+          </a>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={onShowPerformance}
-              className="flex items-center text-gray-400 hover:text-gray-500 transition-colors"
-              title="Performance Monitor"
-            >
-              <ChartBarIcon className="h-5 w-5" />
-            </button>
+            <AdminFeature feature="performanceMonitor">
+              <button
+                onClick={onShowPerformance}
+                className="flex items-center text-gray-400 hover:text-gray-500 transition-colors"
+                title="Performance Monitor"
+              >
+                <ChartBarIcon className="h-5 w-5" />
+              </button>
+            </AdminFeature>
             <button
               onClick={onSignOut}
               className="flex items-center text-gray-400 hover:text-gray-500 transition-colors"
