@@ -8,7 +8,7 @@ import { useHybridGrammarCheck } from '../hooks/useHybridGrammarCheck';
 import { Document } from '../types/firestore';
 import { EditorSuggestion, CategorizedSuggestions } from '../types/grammar';
 import { GrammarService } from '../services/grammar';
-import { ArrowLeft, Save, Clock, Zap, Brain } from 'lucide-react';
+import { ArrowLeft, Save, Clock, Zap, Brain, ChevronRight, ChevronLeft, ChevronDown } from 'lucide-react';
 import { DocumentLengthDropdown, EstimatedTimeDropdown, ReadabilityTooltip } from '../components/MetricsComponents';
 import { calculateTextMetrics } from '../utils/textMetrics';
 
@@ -24,6 +24,7 @@ const DocumentEditor: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editorState, setEditorState] = useState<EditorStateData>({
     content: '',
     html: '',
@@ -585,16 +586,112 @@ const DocumentEditor: React.FC = () => {
           </div>
         </div>
 
-        {/* Grammar Sidebar */}
-        <GrammarSidebar
-          categorizedSuggestions={categorizedSuggestions}
-          isLoading={isGrammarLoading}
-          isRefining={isGrammarRefining}
-          onApplySuggestion={handleApplySuggestion}
-          onDismissSuggestion={handleDismissSuggestion}
-          onRefineSuggestion={handleRefineSuggestion}
-          onClearAll={handleClearAllSuggestions}
-        />
+        {/* Grammar Sidebar - Always visible on lg+ screens (≥1024px) */}
+        <div className="hidden lg:block">
+          <GrammarSidebar
+            categorizedSuggestions={categorizedSuggestions}
+            isLoading={isGrammarLoading}
+            isRefining={isGrammarRefining}
+            onApplySuggestion={handleApplySuggestion}
+            onDismissSuggestion={handleDismissSuggestion}
+            onRefineSuggestion={handleRefineSuggestion}
+            onClearAll={handleClearAllSuggestions}
+          />
+        </div>
+      </div>
+
+      {/* Mobile bottom sheet for small screens (<900px) */}
+      <div className="lg:hidden">
+        {/* Bottom sheet toggle button */}
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="fixed bottom-20 right-4 z-20 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors"
+          title="Grammar Assistant"
+        >
+          <Brain className="w-5 h-5" />
+        </button>
+
+        {/* Bottom sheet overlay */}
+        {isSidebarOpen && (
+          <div className="fixed inset-0 z-30 bg-black bg-opacity-50" onClick={() => setIsSidebarOpen(false)} />
+        )}
+
+        {/* Bottom sheet panel */}
+        <div className={`fixed bottom-0 left-0 right-0 z-40 bg-white transform transition-transform duration-300 ${
+          isSidebarOpen ? 'translate-y-0' : 'translate-y-full'
+        } max-h-[70vh] overflow-hidden`}>
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-800">Grammar Assistant</h2>
+                         <button
+               onClick={() => setIsSidebarOpen(false)}
+               className="p-1 text-gray-400 hover:text-gray-600"
+             >
+               <ChevronDown className="w-5 h-5" />
+             </button>
+          </div>
+
+          <div className="overflow-y-auto max-h-[calc(70vh-60px)]">
+            <div className="p-4">
+              {/* Mobile-optimized content */}
+              {isGrammarLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : Object.values(categorizedSuggestions).reduce((total, suggestions) => total + suggestions.length, 0) === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-gray-400 mb-2">
+                    <Brain className="w-12 h-12 mx-auto" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-700 mb-1">Great writing!</h3>
+                  <p className="text-sm text-gray-500">No grammar suggestions found.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Simplified mobile suggestions list */}
+                                     {Object.entries(categorizedSuggestions).map(([category, suggestions]) =>
+                     suggestions.length > 0 && (
+                       <div key={category} className="space-y-2">
+                         <h3 className="font-semibold text-gray-800 capitalize">{category} ({suggestions.length})</h3>
+                         {suggestions.map((suggestion: EditorSuggestion) => (
+                          <div key={suggestion.id} className="p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-800">
+                                {suggestion.type}
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    handleApplySuggestion(suggestion);
+                                    setIsSidebarOpen(false);
+                                  }}
+                                  className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  onClick={() => handleDismissSuggestion(suggestion.id)}
+                                  className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
+                                >
+                                  Dismiss
+                                </button>
+                              </div>
+                            </div>
+                            <div className="text-sm mb-2">
+                              <span className="line-through text-red-600">"{suggestion.original}"</span>
+                              <span className="mx-2">→</span>
+                              <span className="text-green-600">"{suggestion.proposed}"</span>
+                            </div>
+                            <p className="text-sm text-gray-600">{suggestion.explanation}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -342,7 +342,7 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
             />
           </div>
           {!readOnly && (
-            <div className="fixed bottom-0 left-0 right-0 z-10">
+            <div className="fixed bottom-0 left-0 z-10 lg:right-80 right-0">
               <EditorToolbar />
             </div>
           )}

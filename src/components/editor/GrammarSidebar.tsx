@@ -196,7 +196,7 @@ const GrammarSidebar: React.FC<GrammarSidebarProps> = ({
   };
 
   return (
-    <div className="w-80 bg-gray-50 border-l border-gray-200 h-full overflow-hidden flex flex-col">
+    <div className="w-80 bg-gray-50 border-l border-gray-200 h-full min-h-full overflow-hidden flex flex-col">
       {/* Header */}
       <div className="p-4 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between">

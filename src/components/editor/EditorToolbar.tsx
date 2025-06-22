@@ -506,7 +506,7 @@ const EditorToolbar: React.FC<ToolbarProps> = ({ className = '' }) => {
     <>
       <div className={`bg-white shadow-lg ${className}`}>
         {/* Mobile Toolbar */}
-        <div className="sm:hidden px-4 py-2 overflow-x-auto">
+        <div className="sm:hidden px-4 py-2 overflow-x-auto flex justify-center">
           <div className="flex items-center gap-1 min-w-max">
             {/* Essential formatting - always visible */}
             <ToolbarButton
@@ -602,7 +602,7 @@ const EditorToolbar: React.FC<ToolbarProps> = ({ className = '' }) => {
 
         {/* Desktop Toolbar */}
         <div className="hidden sm:block">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2 flex items-center gap-1">
+          <div className="px-4 sm:px-6 py-2 flex items-center justify-center gap-1">
             {/* Text formatting */}
             <ToolbarButton
               onClick={() => formatText('bold')}
