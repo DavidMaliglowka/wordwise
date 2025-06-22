@@ -245,8 +245,28 @@ const DocumentEditor: React.FC = () => {
 
     // Handle editor content changes
   const handleEditorChange = useCallback((stateData: EditorStateData) => {
+    console.log('🔧 SAVE STATE DEBUG: handleEditorChange called', {
+      newContent: stateData.content,
+      newContentLength: stateData.content.length,
+      currentDocumentContent: document?.content || '',
+      currentDocumentContentLength: (document?.content || '').length,
+      contentChanged: stateData.content !== (document?.content || ''),
+      isApplyingSuggestion: isApplyingSuggestion.current,
+      isApplyingMarks: isApplyingMarks.current,
+      currentHasUnsavedChanges: hasUnsavedChanges,
+      timestamp: new Date().toISOString()
+    });
+
     setEditorState(stateData);
-    setHasUnsavedChanges(true);
+
+    // Only set hasUnsavedChanges if content actually differs from saved document
+    const contentChanged = stateData.content !== (document?.content || '');
+    if (contentChanged) {
+      console.log('🔧 SAVE STATE DEBUG: Content changed - setting hasUnsavedChanges to true');
+      setHasUnsavedChanges(true);
+    } else {
+      console.log('🔧 SAVE STATE DEBUG: Content unchanged - keeping current hasUnsavedChanges state');
+    }
 
     // Skip grammar checking if we're currently applying a suggestion or marks to prevent infinite loops
     if (isApplyingSuggestion.current || isApplyingMarks.current) {
@@ -270,7 +290,7 @@ const DocumentEditor: React.FC = () => {
       // Clear suggestions if content is empty
       clearSuggestions();
     }
-  }, [checkGrammar, clearSuggestions]);
+  }, [checkGrammar, clearSuggestions, document?.content, hasUnsavedChanges]);
 
   // Save document
   const saveDocument = useCallback(async (stateData?: EditorStateData) => {
@@ -278,14 +298,26 @@ const DocumentEditor: React.FC = () => {
 
     const dataToSave = stateData || editorState;
 
+    console.log('🔧 SAVE STATE DEBUG: saveDocument called', {
+      contentToSave: dataToSave.content,
+      contentLength: dataToSave.content.length,
+      currentDocumentContent: document.content,
+      currentDocumentContentLength: document.content.length,
+      hasUnsavedChanges,
+      saving,
+      timestamp: new Date().toISOString()
+    });
+
     try {
       setSaving(true);
+      console.log('🔧 SAVE STATE DEBUG: Starting save operation');
 
             await FirestoreService.Document.updateDocument(document.id, {
         content: dataToSave.content,
         updatedAt: new Date() as any,
       });
 
+      console.log('🔧 SAVE STATE DEBUG: Save completed - setting hasUnsavedChanges to false');
       setHasUnsavedChanges(false);
       setLastSaved(new Date());
 
@@ -298,11 +330,13 @@ const DocumentEditor: React.FC = () => {
 
     } catch (error) {
       console.error('Error saving document:', error);
+      console.log('🔧 SAVE STATE DEBUG: Save failed');
       // TODO: Show error toast
     } finally {
       setSaving(false);
+      console.log('🔧 SAVE STATE DEBUG: Save operation finished, saving=false');
     }
-  }, [document, user, saving, editorState]);
+  }, [document, user, saving, editorState, hasUnsavedChanges]);
 
   // Auto-save handler
   const handleAutoSave = useCallback((stateData: EditorStateData) => {
@@ -406,9 +440,17 @@ const DocumentEditor: React.FC = () => {
             <button
               onClick={handleManualSave}
               disabled={saving || !hasUnsavedChanges}
-              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`
+                px-3 py-1.5 text-sm rounded-lg transition-colors disabled:cursor-not-allowed border-2
+                ${saving
+                  ? 'bg-gray-500 border-gray-500 text-white disabled:opacity-50'
+                  : hasUnsavedChanges
+                    ? 'bg-blue-500 hover:bg-blue-600 border-blue-500 hover:border-blue-600 text-white'
+                    : 'bg-white border-green-500 text-green-600 disabled:opacity-50'
+                }
+              `}
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Saved'}
             </button>
           </div>
 
@@ -500,12 +542,12 @@ const DocumentEditor: React.FC = () => {
               onClick={handleManualSave}
               disabled={saving || !hasUnsavedChanges}
               className={`
-                px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-center
+                px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-center border-2
                 ${saving
-                  ? 'bg-blue-600 text-white cursor-not-allowed'
+                  ? 'bg-gray-500 border-gray-500 text-white cursor-not-allowed'
                   : hasUnsavedChanges
-                    ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md hover:shadow-lg'
-                    : 'bg-green-500 text-white cursor-default opacity-75'
+                    ? 'bg-blue-500 hover:bg-blue-600 border-blue-500 hover:border-blue-600 text-white shadow-md hover:shadow-lg'
+                    : 'bg-white border-green-500 text-green-600 cursor-default'
                 }
               `}
             >
