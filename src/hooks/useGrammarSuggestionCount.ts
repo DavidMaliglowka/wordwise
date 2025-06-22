@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { GrammarService } from '../services/grammar';
+import { hybridGrammarService } from '../services/grammar-hybrid';
 import { Document } from '../types/firestore';
 
 interface SuggestionCountResult {
-  count: number;
+  count: number | null; // null means we can't determine the count
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -11,10 +11,10 @@ interface SuggestionCountResult {
 
 /**
  * Hook to get real-time grammar suggestion count for a document
- * Uses debounced checking to avoid excessive API calls
+ * Uses the same hybrid grammar service as the editor for consistency
  */
 export const useGrammarSuggestionCount = (document: Document): SuggestionCountResult => {
-  const [count, setCount] = useState<number>(0);
+  const [count, setCount] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -39,11 +39,11 @@ export const useGrammarSuggestionCount = (document: Document): SuggestionCountRe
     setError(null);
 
     try {
-      const response = await GrammarService.checkGrammar({
-        text: document.content,
-        includeSpelling: true,
-        includeGrammar: true,
-        includeStyle: false // Keep it focused on grammar/spelling for performance
+      // Use the same hybrid grammar service as the editor for consistency
+      const response = await hybridGrammarService.checkGrammar(document.content, {
+        includeStyle: false, // Keep it focused on grammar/spelling for performance
+        priority: 'fast', // Prioritize speed for dashboard
+        userTier: 'premium' // Assume premium for now, could be made dynamic
       });
 
       setCount(response.suggestions.length);
@@ -51,20 +51,16 @@ export const useGrammarSuggestionCount = (document: Document): SuggestionCountRe
     } catch (err) {
       console.error('Error checking grammar suggestions:', err);
 
-      // Set a fallback count based on document's existing editCount if available
-      const fallbackCount = document.editCount || 0;
-      setCount(fallbackCount);
+      // Don't fall back to editCount - if we can't determine, set to null
+      setCount(null);
 
-      // Only set error for non-auth related issues to avoid spamming
-      if (err && typeof err === 'object' && 'type' in err && err.type !== 'auth') {
-        setError('Unable to check suggestions');
-      }
-
+      // Only set error for display purposes
+      setError('Unable to check suggestions');
       setLastUpdated(new Date());
     } finally {
       setLoading(false);
     }
-  }, [document.content, document.editCount]);
+  }, [document.content]);
 
   // Effect to check suggestion count when document content changes
   useEffect(() => {
@@ -87,6 +83,7 @@ export const useGrammarSuggestionCount = (document: Document): SuggestionCountRe
 /**
  * Hook for batch suggestion counting (for multiple documents)
  * More efficient when dealing with document lists
+ * Uses the same hybrid grammar service as the editor
  */
 export const useBatchGrammarSuggestionCount = (documents: Document[]): Map<string, SuggestionCountResult> => {
   const [results, setResults] = useState<Map<string, SuggestionCountResult>>(new Map());
@@ -104,18 +101,18 @@ export const useBatchGrammarSuggestionCount = (documents: Document[]): Map<strin
 
     // Set loading state
     setResults(prev => new Map(prev.set(document.id, {
-      count: prev.get(document.id)?.count || 0,
+      count: prev.get(document.id)?.count || null,
       loading: true,
       error: null,
       lastUpdated: prev.get(document.id)?.lastUpdated || null
     })));
 
     try {
-      const response = await GrammarService.checkGrammar({
-        text: document.content,
-        includeSpelling: true,
-        includeGrammar: true,
-        includeStyle: false
+      // Use the same hybrid grammar service as the editor for consistency
+      const response = await hybridGrammarService.checkGrammar(document.content, {
+        includeStyle: false, // Keep it focused on grammar/spelling for performance
+        priority: 'fast', // Prioritize speed for dashboard
+        userTier: 'premium' // Assume premium for now, could be made dynamic
       });
 
       setResults(prev => new Map(prev.set(document.id, {
@@ -127,13 +124,11 @@ export const useBatchGrammarSuggestionCount = (documents: Document[]): Map<strin
     } catch (err) {
       console.error(`Error checking grammar for document ${document.id}:`, err);
 
-      const fallbackCount = document.editCount || 0;
+      // Don't fall back to editCount - if we can't determine, set to null
       setResults(prev => new Map(prev.set(document.id, {
-        count: fallbackCount,
+        count: null,
         loading: false,
-        error: err && typeof err === 'object' && 'type' in err && err.type !== 'auth'
-          ? 'Unable to check suggestions'
-          : null,
+        error: 'Unable to check suggestions',
         lastUpdated: new Date()
       })));
     }

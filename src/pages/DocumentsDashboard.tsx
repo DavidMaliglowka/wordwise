@@ -26,7 +26,7 @@ interface DocumentCardProps {
   onDownload: (doc: Document) => void;
   onDelete: (doc: Document) => void;
   onClick: (doc: Document) => void;
-  suggestionCount?: number;
+  suggestionCount?: number | null;
   suggestionLoading?: boolean;
   suggestionError?: string | null;
 }
@@ -36,7 +36,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
   onDownload,
   onDelete,
   onClick,
-  suggestionCount = 0,
+  suggestionCount = null,
   suggestionLoading = false,
   suggestionError = null
 }) => {
@@ -56,8 +56,8 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
     });
   };
 
-  // Use real-time suggestion count, fallback to document's editCount, then 0
-  const displayCount = suggestionCount ?? document.editCount ?? 0;
+  // Determine if we should show the suggestion count circle
+  const shouldShowSuggestionCount = suggestionCount !== null || suggestionLoading || suggestionError;
 
   return (
     <div
@@ -86,21 +86,38 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
 
       {/* Bottom section with actions and suggestion count */}
       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-        {/* Suggestion count circle - Task 22.2 */}
-        <div
-          className={`flex items-center justify-center w-6 h-6 text-white text-xs font-medium rounded-full relative transition-colors ${
-            suggestionError ? 'bg-yellow-500' : 'bg-red-500'
-          }`}
-          title={suggestionError || `${displayCount} suggestions found`}
-        >
-          {suggestionLoading ? (
-            <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
-          ) : suggestionError ? (
-            '?'
-          ) : (
-            displayCount
-          )}
-        </div>
+        {/* Suggestion count circle - only show if we can determine the count */}
+        {shouldShowSuggestionCount && (
+          <div
+            className={`flex items-center justify-center w-6 h-6 text-white text-xs font-medium rounded-full relative transition-colors ${
+              suggestionError
+                ? 'bg-yellow-500'
+                : suggestionCount === 0
+                  ? 'bg-green-500'
+                  : 'bg-red-500'
+            }`}
+            title={
+              suggestionError
+                ? suggestionError
+                : suggestionCount === 0
+                  ? 'No suggestions - document looks good!'
+                  : `${suggestionCount} suggestions found`
+            }
+          >
+            {suggestionLoading ? (
+              <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+            ) : suggestionError ? (
+              '?'
+            ) : suggestionCount === 0 ? (
+              // Checkmark icon for zero suggestions
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              suggestionCount
+            )}
+          </div>
+        )}
 
         {/* Action buttons - always visible */}
         <div className="flex space-x-2">
