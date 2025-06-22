@@ -5,6 +5,9 @@ import retextPassive from 'retext-passive';
 import retextIndefiniteArticle from 'retext-indefinite-article';
 import retextRepeatedWords from 'retext-repeated-words';
 import retextStringify from 'retext-stringify';
+import retextSimplify from 'retext-simplify';
+import retextContractions from 'retext-contractions';
+import retextQuotes from 'retext-quotes';
 import * as unorm from 'unorm';
 import GraphemeSplitter from 'grapheme-splitter';
 import { nanoid } from 'nanoid';
@@ -288,6 +291,9 @@ export class ClientGrammarEngine {
         .use(retextPassive)
         .use(retextIndefiniteArticle)
         .use(retextRepeatedWords)
+        .use(retextSimplify)
+        .use(retextContractions)
+        .use(retextQuotes)
         // Note: retext-usage removed due to internal errors (deprecated package)
         .use(retextStringify);
 
@@ -375,6 +381,9 @@ export class ClientGrammarEngine {
         const isPassive = message.source === 'retext-passive';
         const isArticle = message.source === 'retext-indefinite-article';
         const isRepeated = message.source === 'retext-repeated-words';
+        const isSimplify = message.source === 'retext-simplify';
+        const isContractions = message.source === 'retext-contractions';
+        const isQuotes = message.source === 'retext-quotes';
 
         let replacement: string | undefined;
         let confidence = 60; // Default confidence
@@ -387,6 +396,15 @@ export class ClientGrammarEngine {
         } else if (isSpelling && message.expected) {
           const suggestions = Array.isArray(message.expected) ? message.expected : [message.expected];
           replacement = this.pickBestSuggestion(flaggedText, suggestions);
+        } else if (isSimplify && message.expected) {
+          replacement = Array.isArray(message.expected) ? message.expected[0] : message.expected;
+          confidence = 70;
+        } else if (isContractions && message.expected) {
+          replacement = Array.isArray(message.expected) ? message.expected[0] : message.expected;
+          confidence = 85;
+        } else if (isQuotes && message.expected) {
+          replacement = Array.isArray(message.expected) ? message.expected[0] : message.expected;
+          confidence = 75;
         }
 
         const suggestion = {
@@ -396,7 +414,7 @@ export class ClientGrammarEngine {
           severity: isSpelling ? 'error' : (isPassive ? 'suggestion' : 'warning') as 'error' | 'warning' | 'suggestion',
           range: { start, end },
           replacement,
-          type: isSpelling ? 'spelling' : (isPassive ? 'passive' : (isArticle ? 'grammar' : 'style')) as 'spelling' | 'grammar' | 'style' | 'passive',
+          type: isSpelling ? 'spelling' : (isPassive ? 'passive' : (isArticle || isContractions ? 'grammar' : 'style')) as 'spelling' | 'grammar' | 'style' | 'passive',
           confidence,
           flaggedText // Include the flagged text for personal dictionary filtering
         };
