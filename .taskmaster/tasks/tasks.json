@@ -823,11 +823,62 @@
             "parentTaskId": 14
           }
         ]
+      },
+      {
+        "id": 15,
+        "title": "Comprehensive Editor UI/UX Cleanup",
+        "description": "Revise the document editor interface to address layout inconsistencies and interaction issues including toolbar width, sidebar height, interactive grammar marks, and save button state management.",
+        "details": "Constrain the fixed navigation toolbar so it spans only the width of the editor rather than the full screen. Adjust the right sidebar to extend to the full vertical height even when empty to ensure visual consistency. Enhance the grammar suggestion feature by implementing click functionality on highlighted grammar marks to trigger hover cards with detailed explanations and options. Refactor the save button logic so that it displays blue when there are no unsaved changes and switches to orange only when there are actual unsaved changes that require saving. Update related CSS styles, React components, and event handlers to integrate these improvements seamlessly with the existing editor functionality.",
+        "testStrategy": "Perform manual UI testing by loading documents and verifying that the toolbar is correctly confined to the editor width and the sidebar occupies full vertical space. Click on highlighted grammar marks to ensure the hover cards appear with accurate information. Edit document content to validate that the save button transitions appropriately between blue and orange according to the saved state. Additionally, run unit tests to confirm that state management and event handlers function as expected, and conduct cross-browser testing to ensure consistency across platforms.",
+        "status": "pending",
+        "dependencies": [
+          6,
+          8
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Constrain Navigation Toolbar Width",
+            "description": "Update the fixed navigation toolbar so that it spans only the width of the editor and not the full screen. This ensures that the toolbar aligns with the main editor area.",
+            "dependencies": [],
+            "details": "Review the existing CSS classes and React component for the navigation toolbar. Modify the container's width property (or related layout properties) to be relative to the editor's width. Ensure the changes are responsive across different device sizes and verify that no other components are negatively affected.",
+            "status": "pending",
+            "testStrategy": "Test across multiple screen resolutions and devices to ensure the toolbar is confined to the editor's boundaries. Validate with both manual UI checks and automated visual regression tests."
+          },
+          {
+            "id": 2,
+            "title": "Adjust Right Sidebar Height",
+            "description": "Ensure the right sidebar extends to the full vertical height of the content area even when it has no content, maintaining visual consistency.",
+            "dependencies": [],
+            "details": "Examine the sidebar component's styling and container rules. Update the CSS to use a height setting that always fills the available vertical space (e.g., using flexbox or height: 100%). Confirm these changes integrate correctly with the overall layout structure of the editor.",
+            "status": "pending",
+            "testStrategy": "Manually test the sidebar with and without content to ensure consistent height. Use responsive design tools to verify the layout across various screen sizes."
+          },
+          {
+            "id": 3,
+            "title": "Enhance Grammar Marks Interaction",
+            "description": "Implement click functionality on highlighted grammar marks to trigger hover cards displaying detailed explanations and correction options.",
+            "dependencies": [],
+            "details": "Modify the grammar marks React component to include an onClick event handler. Develop the hover card component that provides in-depth grammar explanations and actionable suggestions. Integrate proper positioning, animations, and ensure accessibility standards are maintained.",
+            "status": "pending",
+            "testStrategy": "Test by clicking on various grammar marks within the editor and verify that the hover cards appear with correct content. Use unit tests to simulate event triggers and ensure proper component rendering."
+          },
+          {
+            "id": 4,
+            "title": "Refactor Save Button State Management",
+            "description": "Revise the save button's logic so that it displays blue when there are no unsaved changes and turns orange only when unsaved changes exist that require saving.",
+            "dependencies": [],
+            "details": "Audit current state management for the save button within the editor. Refactor the code to correctly monitor unsaved changes. Update CSS classes to reflect the blue and orange states accordingly, and integrate these changes with existing event handlers for save actions.",
+            "status": "pending",
+            "testStrategy": "Simulate edit scenarios to verify the correct color state of the save button in both the saved and unsaved states. Employ unit tests to check the logic behind state transitions."
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-22T16:48:16.131Z",
+      "updated": "2025-06-22T17:50:27.962Z",
       "description": "Tasks for master context"
     }
   }

@@ -53,10 +53,10 @@ export const DocumentLengthDropdown: React.FC<DocumentLengthDropdownProps> = ({
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between w-full text-sm text-gray-600 hover:text-gray-800 transition-colors"
+        className="flex items-center justify-end w-full text-sm text-gray-600 hover:text-gray-800 transition-colors"
       >
-        <span>{currentValue.toLocaleString()} {currentLabel}</span>
-        <ChevronDown className={`w-3 h-3 ml-1 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="mr-1">{currentValue.toLocaleString()} {currentLabel}</span>
+        <ChevronDown className={`w-3 h-3 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
             {isOpen && (
@@ -136,10 +136,10 @@ export const EstimatedTimeDropdown: React.FC<EstimatedTimeDropdownProps> = ({
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between w-full text-sm text-gray-600 hover:text-gray-800 transition-colors"
+        className="flex items-center justify-end w-full text-sm text-gray-600 hover:text-gray-800 transition-colors"
       >
-        <span>{currentTime.display} {currentLabel}</span>
-        <ChevronDown className={`w-3 h-3 ml-1 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="mr-1">{currentTime.display} {currentLabel}</span>
+        <ChevronDown className={`w-3 h-3 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
             {isOpen && (
@@ -217,10 +217,10 @@ export const ReadabilityTooltip: React.FC<ReadabilityTooltipProps> = ({
     <div className={`relative ${className}`} ref={tooltipRef}>
       <button
         onClick={() => setIsVisible(!isVisible)}
-        className="flex items-center justify-between w-full text-sm text-gray-600 hover:text-gray-800 transition-colors"
+        className="flex items-center justify-end w-full text-sm text-gray-600 hover:text-gray-800 transition-colors"
       >
-        <span>Grade {grade}</span>
-        <Info className="w-3 h-3 ml-1 flex-shrink-0" />
+        <span className="mr-1">Grade {grade}</span>
+        <Info className="w-3 h-3 flex-shrink-0" />
       </button>
 
       {isVisible && (

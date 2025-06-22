@@ -462,8 +462,7 @@ const DocumentEditor: React.FC = () => {
               onClick={handleBackToDashboard}
               className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 mr-2" />
-              Back to Dashboard
+              <ArrowLeft className="w-5 h-5" />
             </button>
 
             <div className="h-6 w-px bg-gray-300" />
@@ -483,52 +482,48 @@ const DocumentEditor: React.FC = () => {
             />
           </div>
 
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-6">
               {/* Document metrics with fixed widths to prevent layout shift */}
-              <div className="w-32">
+              <div className="w-36">
                 <DocumentLengthDropdown metrics={textMetrics} />
               </div>
-              <span className="text-gray-300">•</span>
-              <div className="w-20">
+              <div className="w-28">
                 <EstimatedTimeDropdown metrics={textMetrics} />
               </div>
-              <span className="text-gray-300">•</span>
-              <div className="w-16">
+              <div className="w-20">
                 <ReadabilityTooltip grade={textMetrics.fleschKincaidGrade} />
               </div>
 
-            {/* Save status */}
-            <div className="flex items-center text-sm text-gray-600">
-              {saving ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                  Saving...
-                </>
-              ) : hasUnsavedChanges ? (
-                <>
-                  <Clock className="w-4 h-4 mr-2 text-amber-500" />
-                  Unsaved changes
-                </>
-              ) : lastSaved ? (
-                <>
-                  <Save className="w-4 h-4 mr-2 text-green-500" />
-                  Saved {lastSaved.toLocaleTimeString()}
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2 text-green-500" />
-                  All changes saved
-                </>
-              )}
-            </div>
-
-            {/* Manual save button */}
+            {/* Integrated Save button with status */}
             <button
               onClick={handleManualSave}
               disabled={saving || !hasUnsavedChanges}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`
+                px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-center
+                ${saving
+                  ? 'bg-blue-600 text-white cursor-not-allowed'
+                  : hasUnsavedChanges
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md hover:shadow-lg'
+                    : 'bg-green-500 text-white cursor-default opacity-75'
+                }
+              `}
             >
-              Save
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Saving</span>
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <Clock className="w-4 h-4" />
+                  <span>Save</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Saved</span>
+                </>
+              )}
             </button>
           </div>
         </div>
