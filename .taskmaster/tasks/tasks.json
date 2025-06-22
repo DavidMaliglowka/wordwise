@@ -434,41 +434,53 @@
       {
         "id": 9,
         "title": "Implement Live Metrics Panel",
-        "description": "Implement the Live Metrics Panel UI in the right sidebar and integrate real-time calculation and display of word count, estimated reading time, and Flesch-Kincaid grade.",
-        "details": "Create the UI component for the right sidebar metrics panel using React and Tailwind. Implement logic to calculate word count, estimated reading time (e.g., 200 words/minute), and Flesch-Kincaid grade based on the editor content. Update these metrics in real-time as the user types. Display the metrics in the panel. Ensure the footer word count sticks bottom-center.",
-        "testStrategy": "Verify metrics update accurately and in real-time as text is added/removed. Test calculations for word count, reading time, and Flesch-Kincaid score with sample texts.",
-        "priority": "medium",
+        "description": "Enhance the top navigation metrics bar by consolidating existing counters, removing redundancy, and expanding functionality to include Grade Level (Flesch-Kincaid) and Reading Time metrics.",
+        "status": "done",
         "dependencies": [
           6
         ],
-        "status": "pending",
+        "priority": "medium",
+        "details": "Revise the current metrics implementation by focusing on the top nav instead of a separate right sidebar panel. Consolidate the existing word and character counters into a single dropdown toggle allowing users to choose their display preference. Remove the duplicate suggestion counters from the top nav (retaining them only in the right sidebar). Additionally, add new metrics: Grade Level (Flesch-Kincaid) and Reading Time. Optionally, implement a dropdown that displays both Reading Time (based on 275 wpm) and Speaking Time (based on 180 wpm). Use the syllable npm package for syllable-based readability calculations and Tailwind for styling. Ensure that all metrics update in real time as the user types.",
+        "testStrategy": "Verify that the top nav metrics bar correctly consolidates the word and character counters into a toggle dropdown and that the new metrics (Grade Level and Reading/Speaking Time) are calculated accurately in real time. Test that suggestion counters are removed from the top nav and remain visible in the right sidebar. Validate the functionality of the dropdown, switching between metrics, and ensure the UI is responsive and styled consistently with Tailwind.",
         "subtasks": [
           {
             "id": 1,
-            "title": "Design Live Metrics UI",
-            "description": "Design the UI elements for the Live Metrics Panel, focusing on the right sidebar layout and footer positioning.",
+            "title": "Redesign Top Nav Metrics Bar UI",
+            "description": "Design the updated UI elements for the top nav metrics bar, including a dropdown toggle for word/character counters, inclusion of Grade Level and Reading Time metrics, and removal of suggestion counters.",
+            "status": "done",
             "dependencies": [],
-            "details": "Create mockups and design prototypes for the panel, ensuring responsive design and proper alignment of sidebar components and footer placement.",
-            "status": "pending"
+            "details": "Create mockups and design prototypes for an updated top nav that integrates the new dropdown for selecting word or character counts, displays Grade Level (Flesch-Kincaid) and Reading Time, and omits suggestion counters. Ensure the design is responsive and aligns with existing UI styles using Tailwind.",
+            "testStrategy": ""
           },
           {
             "id": 2,
-            "title": "Develop Real-Time Metrics Calculation",
-            "description": "Implement the logic to calculate word count, estimated reading time, and Flesch-Kincaid grade in real time.",
+            "title": "Implement Real-Time Metrics Calculation",
+            "description": "Develop the logic for calculating word count, character count, Grade Level (Flesch-Kincaid), and both Reading and Speaking Times in real time.",
+            "status": "done",
             "dependencies": [],
-            "details": "Set up algorithms for text analysis with live updating capabilities, ensuring accurate and efficient computation of metrics.",
-            "status": "pending"
+            "details": "Utilize the syllable npm package for accurate readability calculations. Adjust existing algorithms to support switching between word and character counts and to compute the new metrics. Ensure that metrics update immediately as the user types.",
+            "testStrategy": ""
           },
           {
             "id": 3,
-            "title": "Integrate UI with Real-Time Logic",
-            "description": "Combine the designed UI with the real-time calculation logic and adjust layout for consistency.",
+            "title": "Integrate Updated UI with Metrics Logic",
+            "description": "Integrate the redesigned top nav UI with the updated real-time calculation logic, ensuring seamless interaction and consistency.",
+            "status": "done",
             "dependencies": [
               1,
               2
             ],
-            "details": "Integrate the UI components with the backend logic, test for responsiveness and proper layout updating, and ensure that the footer and sidebar remain correctly positioned during live updates.",
-            "status": "pending"
+            "details": "Connect the dropdown toggle and new metric displays on the top nav to the backend logic. Verify that all metrics update in real time and that the removal of suggestion counters from the top nav is properly enforced while maintaining their presence in the right sidebar.\n<info added on 2025-06-22T06:24:29.825Z>\nSuccessfully integrated the MetricsDropdown component into DocumentEditor.tsx. The update includes importing MetricsDropdown and calculateTextMetrics, leveraging useMemo for efficient text metrics calculation, and replacing the old document stats section with the new dropdown in the desktop layout. Mobile layout now displays text metrics and grade level, while desktop provides toggles for word/character count as well as reading and speaking time calculations. The integration supports real-time recalculations on content change, incorporates Flesch-Kincaid grade level computation, and implements responsive Tailwind styling with proper click-outside-to-close behavior. Ready for testing and final integration validation.\n</info added on 2025-06-22T06:24:29.825Z>",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Remove Top Nav Suggestion Counters",
+            "description": "Eliminate the suggestion counters from the top navigation bar to avoid redundancy.",
+            "status": "done",
+            "dependencies": [],
+            "details": "Identify and remove the suggestion counter components from the top nav. After removal, ensure that the right sidebar continues to display suggestion counters without any impact on overall functionality.\n<info added on 2025-06-22T06:26:47.413Z>\nSuccessfully completed removal of suggestion counters from the top navigation. The entire suggestion counter section, including the detailed display of grammar statuses and counts, has been eliminated from the desktop layout while preserving full functionality in the GrammarSidebar. All grammar checking operations remain intact, and testing confirms that both desktop and mobile layouts now feature a cleaner top navigation bar with no loss in suggestion capabilities, freeing up space for metrics display and enhancing overall layout clarity.\n</info added on 2025-06-22T06:26:47.413Z>",
+            "testStrategy": ""
           }
         ]
       },
@@ -815,7 +827,7 @@
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-22T03:53:00.904Z",
+      "updated": "2025-06-22T16:48:16.131Z",
       "description": "Tasks for master context"
     }
   }

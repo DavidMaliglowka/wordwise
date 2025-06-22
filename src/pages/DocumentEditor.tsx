@@ -9,6 +9,8 @@ import { Document } from '../types/firestore';
 import { EditorSuggestion, CategorizedSuggestions } from '../types/grammar';
 import { GrammarService } from '../services/grammar';
 import { ArrowLeft, Save, Clock, Zap, Brain } from 'lucide-react';
+import { DocumentLengthDropdown, EstimatedTimeDropdown, ReadabilityTooltip } from '../components/MetricsComponents';
+import { calculateTextMetrics } from '../utils/textMetrics';
 
 const DocumentEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +31,11 @@ const DocumentEditor: React.FC = () => {
     characterCount: 0,
     isEmpty: true,
   });
+
+  // Calculate comprehensive text metrics
+  const textMetrics = React.useMemo(() => {
+    return calculateTextMetrics(editorState.content);
+  }, [editorState.content]);
 
   // Hybrid grammar checking integration - faster and more cost-effective!
   const {
@@ -420,9 +427,11 @@ const DocumentEditor: React.FC = () => {
 
           <div className="flex items-center justify-between mt-2 text-xs text-gray-600">
             <div>
-              <span>{editorState.wordCount} words</span>
+              <span>{textMetrics.wordCount} words</span>
               <span className="mx-2">•</span>
-              <span>{editorState.characterCount} chars</span>
+              <span>{textMetrics.characterCount} chars</span>
+              <span className="mx-2">•</span>
+              <span>Grade {textMetrics.fleschKincaidGrade.toFixed(1)}</span>
             </div>
 
             <div className="flex items-center">
@@ -474,44 +483,19 @@ const DocumentEditor: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center space-x-4">
-            {/* Document stats */}
-            <div className="text-sm text-gray-600">
-              <span>{editorState.wordCount} words</span>
-              <span className="mx-2">•</span>
-              <span>{editorState.characterCount} characters</span>
-                            {/* Hybrid Grammar checking status */}
-              <span className="mx-2">•</span>
-              <span className={`${isGrammarLoading ? 'text-blue-600' : suggestions.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                {isGrammarLoading ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Zap className="w-3 h-3" />
-                    <span>Analyzing...</span>
-                  </span>
-                ) : isGrammarRefining ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Brain className="w-3 h-3 animate-pulse" />
-                    <span>AI refining...</span>
-                  </span>
-                ) : suggestions.length > 0 ? (
-                   <span className="inline-flex items-center gap-1">
-                     <Zap className="w-3 h-3" />
-                     <span>{suggestions.length} suggestions</span>
-                     <span className="text-xs text-gray-500">({stats.totalProcessingTime.toFixed(0)}ms)</span>
-                     {categorizedSuggestions.correctness.length > 0 && (
-                       <span className="text-xs bg-red-100 text-red-700 px-1 rounded">
-                         {categorizedSuggestions.correctness.length} errors
-                       </span>
-                     )}
-                     {categorizedSuggestions.clarity.length > 0 && (
-                       <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">
-                         {categorizedSuggestions.clarity.length} clarity
-                       </span>
-                     )}
-                   </span>
-                 ) : 'Grammar ok'}
-              </span>
-            </div>
+                      <div className="flex items-center space-x-4">
+              {/* Document metrics with fixed widths to prevent layout shift */}
+              <div className="w-32">
+                <DocumentLengthDropdown metrics={textMetrics} />
+              </div>
+              <span className="text-gray-300">•</span>
+              <div className="w-20">
+                <EstimatedTimeDropdown metrics={textMetrics} />
+              </div>
+              <span className="text-gray-300">•</span>
+              <div className="w-16">
+                <ReadabilityTooltip grade={textMetrics.fleschKincaidGrade} />
+              </div>
 
             {/* Save status */}
             <div className="flex items-center text-sm text-gray-600">

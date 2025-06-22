@@ -110,6 +110,9 @@ importers:
       retext-stringify:
         specifier: ^4.0.0
         version: 4.0.0
+      syllable:
+        specifier: ^5.0.1
+        version: 5.0.1
       unified:
         specifier: ^11.0.5
         version: 11.0.5

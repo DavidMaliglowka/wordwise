@@ -58,6 +58,7 @@
     "retext-simplify": "^8.0.0",
     "retext-spell": "^6.1.0",
     "retext-stringify": "^4.0.0",
+    "syllable": "^5.0.1",
     "unified": "^11.0.5",
     "unorm": "^1.6.0"
   },
