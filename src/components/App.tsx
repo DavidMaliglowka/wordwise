@@ -113,17 +113,17 @@ const AppContent: React.FC = () => {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute>
+            <AdminRoute feature="testRoutes">
               <AdminPanel />
-            </ProtectedRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin-debug"
           element={
-            <ProtectedRoute>
+            <AdminRoute feature="testRoutes">
               <AdminDebug />
-            </ProtectedRoute>
+            </AdminRoute>
           }
         />
 

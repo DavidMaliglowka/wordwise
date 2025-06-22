@@ -236,26 +236,36 @@ export class DocumentService {
   }
 
   static async deleteDocument(id: string): Promise<void> {
+    // First, verify the document exists and get the user ID for ownership validation
+    const docRef = doc(db, COLLECTIONS.DOCUMENTS, id);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      throw new Error('Document not found');
+    }
+
+    const documentData = docSnap.data() as Document;
     const batch = writeBatch(db);
 
-    // Delete the document
-    const docRef = doc(db, COLLECTIONS.DOCUMENTS, id);
+    // Delete the document (Firestore rules will validate ownership)
     batch.delete(docRef);
 
-    // Delete all suggestions for this document
+    // Delete all suggestions for this document (filter by user for security)
     const suggestionsQuery = query(
       collection(db, COLLECTIONS.SUGGESTIONS),
-      where('docId', '==', id)
+      where('docId', '==', id),
+      where('uid', '==', documentData.uid)
     );
     const suggestions = await getDocs(suggestionsQuery);
     suggestions.forEach(suggestion => {
       batch.delete(suggestion.ref);
     });
 
-    // Delete all metric snapshots for this document
+    // Delete all metric snapshots for this document (filter by user for security)
     const metricsQuery = query(
       collection(db, COLLECTIONS.METRIC_SNAPSHOTS),
-      where('docId', '==', id)
+      where('docId', '==', id),
+      where('uid', '==', documentData.uid)
     );
     const metrics = await getDocs(metricsQuery);
     metrics.forEach(metric => {

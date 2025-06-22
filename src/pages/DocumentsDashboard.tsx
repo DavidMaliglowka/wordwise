@@ -18,15 +18,28 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import { AdminFeature } from '../components/AdminRoute';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { createTestDocuments, deleteAllUserDocuments, createSingleTestDocument, simpleDeleteAllDocuments } from '../utils/createTestDocuments';
+import { useBatchGrammarSuggestionCount } from '../hooks/useGrammarSuggestionCount';
+import { useToast, ToastContainer } from '../components/Toast';
 
 interface DocumentCardProps {
   document: Document;
   onDownload: (doc: Document) => void;
   onDelete: (doc: Document) => void;
   onClick: (doc: Document) => void;
+  suggestionCount?: number;
+  suggestionLoading?: boolean;
+  suggestionError?: string | null;
 }
 
-const DocumentCard: React.FC<DocumentCardProps> = ({ document, onDownload, onDelete, onClick }) => {
+const DocumentCard: React.FC<DocumentCardProps> = ({
+  document,
+  onDownload,
+  onDelete,
+  onClick,
+  suggestionCount = 0,
+  suggestionLoading = false,
+  suggestionError = null
+}) => {
   // Calculate reading time (assuming 200 words per minute)
   const wordCount = document.content.split(/\s+/).length;
   const readingTime = Math.ceil(wordCount / 200);
@@ -43,8 +56,8 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onDownload, onDel
     });
   };
 
-  // Real edit count from document data (defaulting to 0 for new documents)
-  const editsRemaining = document.editCount ?? 0;
+  // Use real-time suggestion count, fallback to document's editCount, then 0
+  const displayCount = suggestionCount ?? document.editCount ?? 0;
 
   return (
     <div
@@ -71,11 +84,22 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onDownload, onDel
         </p>
       </div>
 
-      {/* Bottom section with actions and edit count */}
+      {/* Bottom section with actions and suggestion count */}
       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-        {/* Edit count circle */}
-        <div className="flex items-center justify-center w-6 h-6 bg-red-500 text-white text-xs font-medium rounded-full">
-          {editsRemaining}
+        {/* Suggestion count circle - Task 22.2 */}
+        <div
+          className={`flex items-center justify-center w-6 h-6 text-white text-xs font-medium rounded-full relative transition-colors ${
+            suggestionError ? 'bg-yellow-500' : 'bg-red-500'
+          }`}
+          title={suggestionError || `${displayCount} suggestions found`}
+        >
+          {suggestionLoading ? (
+            <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+          ) : suggestionError ? (
+            '?'
+          ) : (
+            displayCount
+          )}
         </div>
 
         {/* Action buttons - always visible */}
@@ -117,6 +141,12 @@ const DocumentsDashboard: React.FC = () => {
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | undefined>();
   const [hasMore, setHasMore] = useState(true);
 
+  // Real-time suggestion counts for all documents - Task 22.2
+  const suggestionCounts = useBatchGrammarSuggestionCount(documents);
+
+  // Toast notifications for user feedback - Task 22.3
+  const { toasts, removeToast, showSuccess, showError, showWarning } = useToast();
+
   // Development helpers (accessible via browser console)
   useEffect(() => {
     if (user && process.env.NODE_ENV === 'development') {
@@ -148,7 +178,22 @@ const DocumentsDashboard: React.FC = () => {
         setHasMore(result.hasMore);
       } catch (err) {
         console.error('Error fetching documents:', err);
-        setError('Failed to load documents');
+        const errorMessage = err instanceof Error
+          ? `Failed to load documents: ${err.message}`
+          : 'Failed to load documents';
+        setError(errorMessage);
+
+        // Show error toast for initial load failures - Task 22.3
+        showError(
+          'Loading Error',
+          errorMessage,
+          {
+            action: {
+              label: 'Retry',
+              onClick: () => window.location.reload()
+            }
+          }
+        );
       } finally {
         setLoading(false);
       }
@@ -171,7 +216,22 @@ const DocumentsDashboard: React.FC = () => {
       setHasMore(result.hasMore);
     } catch (err) {
       console.error('Error fetching more documents:', err);
-      setError('Failed to load more documents');
+      const errorMessage = err instanceof Error
+        ? `Failed to load more documents: ${err.message}`
+        : 'Failed to load more documents';
+      setError(errorMessage);
+
+      // Show warning toast for pagination failures - Task 22.3
+      showWarning(
+        'Loading Error',
+        errorMessage,
+        {
+          action: {
+            label: 'Try Again',
+            onClick: fetchMoreDocuments
+          }
+        }
+      );
     } finally {
       setLoadingMore(false);
     }
@@ -204,23 +264,106 @@ const DocumentsDashboard: React.FC = () => {
     navigate(`/editor/${document.id}`);
   };
 
-  const handleDownload = (document: Document) => {
-    // TODO: Implement download functionality
-    console.log('Downloading document:', document.id);
+      const handleDownload = (doc: Document) => {
+    try {
+      // Create a blob with the document content
+      const blob = new Blob([doc.content], { type: 'text/plain' });
+
+      // Create a temporary download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Use document title as filename, fallback to 'document'
+      const filename = (doc.title || 'Untitled Document')
+        .replace(/[^a-z0-9]/gi, '_')  // Replace special chars with underscore
+        .replace(/_+/g, '_')          // Replace multiple underscores with single
+        .replace(/^_|_$/g, '')        // Remove leading/trailing underscores
+        .toLowerCase();
+
+      link.download = `${filename}.txt`;
+
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      console.log('Document downloaded:', doc.id);
+
+      // Success notification - Task 22.3
+      showSuccess(
+        'Download Complete',
+        `"${doc.title || 'Untitled Document'}" has been downloaded successfully.`
+      );
+
+    } catch (error) {
+      console.error('Error downloading document:', error);
+
+      // Error notification with enhanced details - Task 22.3
+      const errorMessage = error instanceof Error
+        ? error.message
+        : 'An unexpected error occurred during download.';
+
+      showError(
+        'Download Failed',
+        `Failed to download "${doc.title || 'Untitled Document'}": ${errorMessage}`,
+        {
+          action: {
+            label: 'Try Again',
+            onClick: () => handleDownload(doc)
+          }
+        }
+      );
+    }
   };
 
-  const handleDelete = async (document: Document) => {
-    if (window.confirm('Are you sure you want to delete this document?')) {
+  const handleDelete = async (doc: Document) => {
+    // Enhanced confirmation dialog with document title
+    const documentTitle = doc.title || 'Untitled Document';
+    const confirmMessage = `Are you sure you want to permanently delete "${documentTitle}"?\n\nThis action cannot be undone.`;
+
+    if (window.confirm(confirmMessage)) {
       try {
-        await DocumentService.deleteDocument(document.id);
-        setDocuments(docs => docs.filter(doc => doc.id !== document.id));
+        // Show loading state by temporarily disabling the button (we'll handle this in UI later)
+        await DocumentService.deleteDocument(doc.id);
+
+        // Remove from local state
+        setDocuments(docs => docs.filter(document => document.id !== doc.id));
+
         // If we have few documents left and there are more available, fetch more
         if (documents.length <= 5 && hasMore && !loadingMore) {
           fetchMoreDocuments();
         }
+
+                console.log('Document deleted successfully:', doc.id);
+
+        // Success notification - Task 22.3
+        showSuccess(
+          'Document Deleted',
+          `"${documentTitle}" has been permanently deleted.`
+        );
+
       } catch (err) {
         console.error('Error deleting document:', err);
-        alert('Failed to delete document');
+
+        // Enhanced error notification - Task 22.3
+        const errorMessage = err instanceof Error
+          ? err.message
+          : 'An unexpected error occurred while deleting the document.';
+
+        showError(
+          'Delete Failed',
+          `Failed to delete "${documentTitle}": ${errorMessage}`,
+          {
+            action: {
+              label: 'Try Again',
+              onClick: () => handleDelete(doc)
+            }
+          }
+        );
       }
     }
   };
@@ -368,15 +511,21 @@ const DocumentsDashboard: React.FC = () => {
                 <>
                   {/* Document grid - mobile optimized */}
                   <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 sm:gap-4">
-                    {filteredDocuments.map((document) => (
-                      <DocumentCard
-                        key={document.id}
-                        document={document}
-                        onClick={handleDocumentClick}
-                        onDownload={handleDownload}
-                        onDelete={handleDelete}
-                      />
-                    ))}
+                    {filteredDocuments.map((document) => {
+                      const suggestionData = suggestionCounts.get(document.id);
+                      return (
+                        <DocumentCard
+                          key={document.id}
+                          document={document}
+                          onClick={handleDocumentClick}
+                          onDownload={handleDownload}
+                          onDelete={handleDelete}
+                          suggestionCount={suggestionData?.count}
+                          suggestionLoading={suggestionData?.loading}
+                          suggestionError={suggestionData?.error}
+                        />
+                      );
+                    })}
                   </div>
 
                   {/* Infinite scroll trigger - only show if not searching */}
@@ -408,6 +557,9 @@ const DocumentsDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Toast notifications - Task 22.3 */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </DashboardLayout>
   );
 };

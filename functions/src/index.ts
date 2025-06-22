@@ -691,11 +691,7 @@ export const getFeatureFlags = onRequest({
       featureFlags = { ...featureFlags, ...data };
     }
 
-    // In production, force disable all development features
-    if (process.env.NODE_ENV === 'production') {
-      featureFlags.testRoutes = false;
-      featureFlags.performanceMonitor = false;
-    }
+    // Note: Admin features are now allowed in production for admin users
 
     logger.info(`Feature flags retrieved by admin: ${uid}`);
 
@@ -745,12 +741,7 @@ export const updateFeatureFlags = onRequest({
       return sendError(res, 400, "Invalid request data - must include flags.testRoutes or flags.performanceMonitor", null, req);
     }
 
-    // In production, reject any attempt to enable development features
-    if (process.env.NODE_ENV === 'production') {
-      if (flags.testRoutes || flags.performanceMonitor) {
-        return sendError(res, 403, "Cannot enable development features in production", null, req);
-      }
-    }
+    // Note: Admin users can now toggle features in production
 
     // Update feature flags in Firestore
     const featureFlagsRef = db.collection('admin').doc('featureFlags');
