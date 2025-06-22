@@ -33,6 +33,9 @@ interface ClientSuggestion {
   type: 'spelling' | 'grammar' | 'style' | 'passive';
   confidence: number;
   flaggedText?: string;
+  // Enhanced passive voice functionality
+  canRegenerate?: boolean;
+  regenerateId?: string;
 }
 
 interface ProcessingDecision {
@@ -103,16 +106,7 @@ export class GrammarDecisionEngine {
       };
     }
 
-    // User tier considerations
-    if (options.userTier === 'free' && estimatedCost > 0.01) {
-      reasons.push('Free tier cost optimization');
-      return {
-        useClientOnly: true,
-        reason: reasons.join('; '),
-        estimatedCost: 0,
-        estimatedLatency: 100
-      };
-    }
+    // User tier restrictions removed - all users get access to enhanced features
 
     // Priority-based decisions
     if (options.priority === 'fast') {
@@ -480,12 +474,199 @@ export class HybridGrammarService {
     return this.instance;
   }
 
+  /**
+   * Enhance passive voice suggestions with GPT-4o sentence-level rewrites
+   */
+  private async enhancePassiveVoiceSuggestions(
+    text: string,
+    suggestions: ClientSuggestion[]
+  ): Promise<ClientSuggestion[]> {
+    const passiveSuggestions = suggestions.filter(s => s.type === 'passive');
+
+    if (passiveSuggestions.length === 0) {
+      return suggestions;
+    }
+
+    console.log(`🔄 Enhancing ${passiveSuggestions.length} passive voice suggestions with GPT-4o`);
+
+    // Group passive suggestions by sentence for more efficient processing
+    const sentenceRewrites = await this.generatePassiveVoiceRewrites(text, passiveSuggestions);
+
+    // Update passive suggestions with enhanced data
+    const enhancedSuggestions = suggestions.map(suggestion => {
+      if (suggestion.type === 'passive') {
+        const rewrite = sentenceRewrites.get(suggestion.id);
+        if (rewrite) {
+          return {
+            ...suggestion,
+            message: `Passive voice detected. Consider active voice for clarity.`,
+            replacement: rewrite.rewrittenSentence,
+            range: rewrite.sentenceRange,
+            confidence: 85,
+            flaggedText: rewrite.originalSentence,
+            // Add regenerate capability
+            canRegenerate: true,
+            regenerateId: suggestion.id
+          };
+        }
+      }
+      return suggestion;
+    });
+
+    return enhancedSuggestions;
+  }
+
+  /**
+   * Generate passive voice rewrites using Cloud Function
+   */
+  private async generatePassiveVoiceRewrites(
+    text: string,
+    passiveSuggestions: ClientSuggestion[]
+  ): Promise<Map<string, { originalSentence: string; rewrittenSentence: string; sentenceRange: { start: number; end: number } }>> {
+    const results = new Map();
+
+    try {
+      // Extract sentences containing passive voice
+      const sentences = this.extractSentencesFromPassiveSuggestions(text, passiveSuggestions);
+
+      // Call Cloud Function to get rewrites
+      const rewrites = await this.callPassiveVoiceRewriteFunction(sentences);
+
+      // Map results back to suggestion IDs
+      passiveSuggestions.forEach((suggestion, index) => {
+        const sentence = sentences[index];
+        const rewrite = rewrites[index];
+
+        if (sentence && rewrite) {
+          results.set(suggestion.id, {
+            originalSentence: sentence.text,
+            rewrittenSentence: rewrite,
+            sentenceRange: sentence.range
+          });
+        }
+      });
+
+    } catch (error) {
+      console.error('Failed to generate passive voice rewrites:', error);
+      // Return empty map to gracefully degrade
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract sentences containing passive voice from text
+   */
+  private extractSentencesFromPassiveSuggestions(
+    text: string,
+    passiveSuggestions: ClientSuggestion[]
+  ): Array<{ text: string; range: { start: number; end: number } }> {
+    const sentences: Array<{ text: string; range: { start: number; end: number } }> = [];
+
+    // Simple sentence boundary detection
+    const sentenceBoundaries = this.findSentenceBoundaries(text);
+
+    for (const suggestion of passiveSuggestions) {
+      // Find which sentence contains this passive voice suggestion
+      const sentenceInfo = this.findContainingSentence(
+        suggestion.range,
+        sentenceBoundaries,
+        text
+      );
+
+      if (sentenceInfo) {
+        sentences.push(sentenceInfo);
+      }
+    }
+
+    return sentences;
+  }
+
+  /**
+   * Find sentence boundaries in text
+   */
+  private findSentenceBoundaries(text: string): Array<{ start: number; end: number }> {
+    const boundaries: Array<{ start: number; end: number }> = [];
+    const sentences = text.split(/[.!?]+/);
+    let currentPos = 0;
+
+    for (const sentence of sentences) {
+      if (sentence.trim().length > 0) {
+        const start = text.indexOf(sentence.trim(), currentPos);
+        const end = start + sentence.trim().length;
+        boundaries.push({ start, end });
+        currentPos = end;
+      }
+    }
+
+    return boundaries;
+  }
+
+  /**
+   * Find which sentence contains a passive voice suggestion
+   */
+  private findContainingSentence(
+    suggestionRange: { start: number; end: number },
+    sentenceBoundaries: Array<{ start: number; end: number }>,
+    text: string
+  ): { text: string; range: { start: number; end: number } } | null {
+    for (const boundary of sentenceBoundaries) {
+      if (suggestionRange.start >= boundary.start && suggestionRange.end <= boundary.end) {
+        return {
+          text: text.slice(boundary.start, boundary.end).trim(),
+          range: boundary
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Call Cloud Function to rewrite passive sentences
+   */
+  private async callPassiveVoiceRewriteFunction(
+    sentences: Array<{ text: string; range: { start: number; end: number } }>
+  ): Promise<string[]> {
+    // Import Firebase functions
+    const { functions } = await import('../lib/firebase');
+    const { httpsCallable } = await import('firebase/functions');
+
+    try {
+      // Call the existing checkGrammar function with a special flag for passive voice enhancement
+      const checkGrammar = httpsCallable(functions, 'checkGrammar');
+
+      const promises = sentences.map(async (sentence) => {
+        const result = await checkGrammar({
+          text: sentence.text,
+          includeStyle: true,
+          includeGrammar: true,
+          enhancePassiveVoice: true // Special flag for passive voice enhancement
+        });
+
+        // Extract the rewritten sentence from the response
+        // This assumes the Cloud Function returns enhanced passive voice suggestions
+        const response = result.data as any;
+        const passiveSuggestion = response.suggestions?.find((s: any) => s.type === 'passive');
+
+        return passiveSuggestion?.replacement || sentence.text;
+      });
+
+      return await Promise.all(promises);
+
+    } catch (error) {
+      console.error('Error calling passive voice rewrite function:', error);
+      // Return original sentences as fallback
+      return sentences.map(s => s.text);
+    }
+  }
+
   async checkGrammar(
     text: string,
     options: {
       includeStyle?: boolean;
       priority?: 'fast' | 'quality' | 'balanced';
       userTier?: 'free' | 'premium';
+      enhancePassiveVoice?: boolean;
     } = {}
   ): Promise<{
     suggestions: ClientSuggestion[];
@@ -606,8 +787,21 @@ export class HybridGrammarService {
         // Cache the result
         grammarCache.setGrammarResult(text, options, result);
 
-        // TODO: Implement GPT enhancement for style suggestions
-        // For now, return client suggestions
+        // Enhance passive voice suggestions with GPT-4o sentence rewrites if enabled
+        if (options.enhancePassiveVoice) {
+          const enhancedSuggestions = await this.enhancePassiveVoiceSuggestions(text, clientSuggestions);
+
+          const finalResult = {
+            ...result,
+            suggestions: enhancedSuggestions
+          };
+
+          // Cache the enhanced result
+          grammarCache.setGrammarResult(text, options, finalResult);
+
+          return finalResult;
+        }
+
         return result;
       }
     } catch (error) {
@@ -678,4 +872,42 @@ if (typeof window !== 'undefined') {
   (window as any).UnicodePositionMapper = UnicodePositionMapper;
   (window as any).GrammarDecisionEngine = GrammarDecisionEngine;
   (window as any).hybridGrammarService = hybridGrammarService;
+
+  // Test function for cache integration
+  (window as any).testPassiveVoiceCache = async () => {
+    const testText = "The report was written by the team. Mistakes were made during the process.";
+
+    console.log('🧪 Testing Passive Voice Cache Integration...');
+
+    // First call - should miss cache and enhance passive voice
+    console.time('First call (cache miss)');
+    const result1 = await hybridGrammarService.checkGrammar(testText, {
+      enhancePassiveVoice: true,
+      includeStyle: true
+    });
+    console.timeEnd('First call (cache miss)');
+    console.log('First result:', result1);
+
+    // Second call - should hit cache
+    console.time('Second call (cache hit)');
+    const result2 = await hybridGrammarService.checkGrammar(testText, {
+      enhancePassiveVoice: true,
+      includeStyle: true
+    });
+    console.timeEnd('Second call (cache hit)');
+    console.log('Second result:', result2);
+
+    // Third call without passive voice enhancement - should miss cache (different options)
+    console.time('Third call (different options)');
+    const result3 = await hybridGrammarService.checkGrammar(testText, {
+      enhancePassiveVoice: false,
+      includeStyle: true
+    });
+    console.timeEnd('Third call (different options)');
+    console.log('Third result:', result3);
+
+    console.log('🎯 Cache test complete! Check timing differences above.');
+
+    return { result1, result2, result3 };
+  };
 }

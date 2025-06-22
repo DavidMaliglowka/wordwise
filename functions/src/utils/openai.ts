@@ -38,7 +38,7 @@ const suggestionSchema = z.object({
     start: z.number().int().min(0),
     end: z.number().int().min(0)
   }),
-  type: z.enum(['grammar', 'spelling', 'punctuation', 'style']),
+  type: z.enum(['grammar', 'spelling', 'punctuation', 'style', 'passive']),
   original: z.string().min(1),
   proposed: z.string().min(1),
   explanation: z.string().min(1),
@@ -82,8 +82,8 @@ const grammarCheckerTool = {
               },
               type: {
                 type: 'string',
-                enum: ['grammar', 'spelling', 'punctuation', 'style'],
-                description: 'Type of language issue'
+                enum: ['grammar', 'spelling', 'punctuation', 'style', 'passive'],
+                description: 'Type of language issue (use "passive" for passive voice suggestions)'
               },
               original: {
                 type: 'string',
@@ -119,14 +119,38 @@ const grammarCheckerTool = {
 function createSystemPrompt(
   includeSpelling: boolean = true,
   includeGrammar: boolean = true,
-  includeStyle: boolean = false
+  includeStyle: boolean = false,
+  enhancePassiveVoice: boolean = false
 ): string {
   const capabilities = [];
   if (includeGrammar) capabilities.push('grammar errors');
   if (includeSpelling) capabilities.push('spelling mistakes');
   if (includeStyle) capabilities.push('style improvements');
+  if (enhancePassiveVoice) capabilities.push('passive voice enhancement');
 
-  return `You are an expert grammar checker. Analyze text for ${capabilities.join(', ')} with these priorities:
+  let prompt = `You are an expert grammar checker. Analyze text for ${capabilities.join(', ')} with these priorities:`;
+
+  if (enhancePassiveVoice) {
+    prompt += `
+
+PASSIVE VOICE ENHANCEMENT (PRIORITY):
+- Detect passive voice constructions (forms of "to be" + past participle)
+- Provide active voice alternatives for entire sentences
+- Mark the ENTIRE sentence containing passive voice, not just the passive phrase
+- For passive voice suggestions:
+  * Type: "passive"
+  * Original: entire sentence with passive voice
+  * Suggested: complete sentence rewritten in active voice
+  * Range: start and end of the entire sentence
+- Examples:
+  * "The report was written by the team." → "The team wrote the report."
+  * "Mistakes were made during the process." → "We made mistakes during the process."
+  * "The decision will be announced tomorrow." → "We will announce the decision tomorrow."
+
+`;
+  }
+
+  return prompt + `
 
 1. SUBJECT-VERB AGREEMENT: Ensure verbs match subjects (singular/plural, person)
 2. CONTEXTUAL WORD CHOICE: "their" vs "they're", "its" vs "it's"
@@ -261,7 +285,7 @@ function parseToolResponse(toolCallArguments: string, originalText: string): Gra
       return true;
     });
 
-    return validSuggestions;
+    return validSuggestions as GrammarSuggestion[];
   } catch (error) {
     logger.error('Error parsing tool response:', {
       error: error instanceof Error ? error.message : String(error),
@@ -324,19 +348,21 @@ export async function checkGrammarWithOpenAI(
     includeGrammar?: boolean;
     includeStyle?: boolean;
     maxTokens?: number;
+    enhancePassiveVoice?: boolean;
   } = {}
 ): Promise<GrammarSuggestion[]> {
   const {
     includeSpelling = true,
     includeGrammar = true,
     includeStyle = false,
-    maxTokens = 4000 // Increased from 1000 to handle more suggestions
+    maxTokens = 4000, // Increased from 1000 to handle more suggestions
+    enhancePassiveVoice = false
   } = options;
 
   try {
     const client = getOpenAI();
 
-    const systemPrompt = createSystemPrompt(includeSpelling, includeGrammar, includeStyle);
+    const systemPrompt = createSystemPrompt(includeSpelling, includeGrammar, includeStyle, enhancePassiveVoice);
     const userPrompt = createUserPrompt(text);
 
     logger.info('Calling OpenAI API for grammar check', {
@@ -344,6 +370,7 @@ export async function checkGrammarWithOpenAI(
       includeSpelling,
       includeGrammar,
       includeStyle,
+      enhancePassiveVoice,
       model: 'gpt-4o'
     });
 
@@ -397,6 +424,7 @@ export async function checkGrammarWithOpenAIStreaming(
     includeGrammar?: boolean;
     includeStyle?: boolean;
     maxTokens?: number;
+    enhancePassiveVoice?: boolean;
   } = {},
   onChunk?: (chunk: string) => void
 ): Promise<GrammarSuggestion[]> {
@@ -404,17 +432,19 @@ export async function checkGrammarWithOpenAIStreaming(
     includeSpelling = true,
     includeGrammar = true,
     includeStyle = false,
-    maxTokens = 4000 // Increased from 1000 to handle more suggestions
+    maxTokens = 4000, // Increased from 1000 to handle more suggestions
+    enhancePassiveVoice = false
   } = options;
 
   try {
     const client = getOpenAI();
 
-    const systemPrompt = createSystemPrompt(includeSpelling, includeGrammar, includeStyle);
+    const systemPrompt = createSystemPrompt(includeSpelling, includeGrammar, includeStyle, enhancePassiveVoice);
     const userPrompt = createUserPrompt(text);
 
     logger.info('Calling OpenAI API for streaming grammar check', {
       textLength: text.length,
+      enhancePassiveVoice,
       model: 'gpt-4o'
     });
 

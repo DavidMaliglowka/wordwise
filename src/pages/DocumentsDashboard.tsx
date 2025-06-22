@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   PlusIcon,
   ArrowUpTrayIcon,
@@ -12,7 +12,7 @@ import {
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
-import { DocumentService } from '../services/firestore';
+import { DocumentService } from '../services/documents';
 import { Document } from '../types/firestore';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import { AdminFeature } from '../components/AdminRoute';
@@ -20,6 +20,8 @@ import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { createTestDocuments, deleteAllUserDocuments, createSingleTestDocument, simpleDeleteAllDocuments } from '../utils/createTestDocuments';
 import { useBatchGrammarSuggestionCount } from '../hooks/useGrammarSuggestionCount';
 import { useToast, ToastContainer } from '../components/Toast';
+import * as mammoth from 'mammoth';
+import { CreateDocumentData } from '../types/firestore';
 
 interface DocumentCardProps {
   document: Document;
@@ -157,6 +159,10 @@ const DocumentsDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | undefined>();
   const [hasMore, setHasMore] = useState(true);
+  const [uploading, setUploading] = useState(false); // Track upload state
+
+  // File input ref for Word document uploads
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real-time suggestion counts for all documents - Task 22.2
   const suggestionCounts = useBatchGrammarSuggestionCount(documents);
@@ -189,10 +195,10 @@ const DocumentsDashboard: React.FC = () => {
         setError(null);
         // Use smaller batch size in development for easier testing
         const batchSize = process.env.NODE_ENV === 'development' ? 8 : 20;
-        const result = await DocumentService.getUserDocuments(user.uid, batchSize);
-        setDocuments(result.documents);
-        setLastDoc(result.lastDoc);
-        setHasMore(result.hasMore);
+        const documents = await DocumentService.getDocuments();
+        setDocuments(documents);
+        // Note: The documents service doesn't support pagination yet, so we'll set hasMore to false
+        setHasMore(false);
       } catch (err) {
         console.error('Error fetching documents:', err);
         const errorMessage = err instanceof Error
@@ -227,10 +233,8 @@ const DocumentsDashboard: React.FC = () => {
       setLoadingMore(true);
       // Use smaller batch size in development for easier testing
       const batchSize = process.env.NODE_ENV === 'development' ? 8 : 20;
-      const result = await DocumentService.getUserDocuments(user.uid, batchSize, lastDoc);
-      setDocuments(prev => [...prev, ...result.documents]);
-      setLastDoc(result.lastDoc);
-      setHasMore(result.hasMore);
+                      // Since DocumentService.getDocuments() doesn't support pagination, we'll skip loading more
+        return;
     } catch (err) {
       console.error('Error fetching more documents:', err);
       const errorMessage = err instanceof Error
@@ -273,15 +277,162 @@ const DocumentsDashboard: React.FC = () => {
   };
 
   const handleUploadFile = () => {
-    // TODO: Implement file upload
-    console.log('Uploading file...');
+    // Trigger file input click
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset the input value to allow re-uploading the same file
+    event.target.value = '';
+
+    // Validate file type - now supporting both .docx and .txt
+    const fileName = file.name.toLowerCase();
+    const isDocx = fileName.endsWith('.docx');
+    const isTxt = fileName.endsWith('.txt');
+
+    if (!isDocx && !isTxt) {
+      showError(
+        'Invalid File Type',
+        'Please select a Word document (.docx) or text file (.txt). Other file formats are not supported.',
+        {
+          action: {
+            label: 'Try Again',
+            onClick: handleUploadFile
+          }
+        }
+      );
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      showError(
+        'File Too Large',
+        'The selected file is too large. Please choose a file smaller than 10MB.',
+        {
+          action: {
+            label: 'Try Again',
+            onClick: handleUploadFile
+          }
+        }
+      );
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      let content: string;
+
+      if (isDocx) {
+        // Parse the Word document using mammoth.js
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        content = result.value.trim();
+      } else {
+        // Handle .txt files - read as text
+        content = await file.text();
+      }
+
+      // Basic text cleanup for both file types
+      content = content
+        // Remove excessive whitespace
+        .replace(/\s+/g, ' ')
+        // Remove multiple consecutive line breaks
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        .trim();
+
+      // Validate that we extracted meaningful content
+      if (!content || content.length < 10) {
+        showError(
+          'No Content Found',
+          `The ${isDocx ? 'Word document' : 'text file'} appears to be empty or contains no readable text. Please try a different file.`,
+          {
+            action: {
+              label: 'Try Again',
+              onClick: handleUploadFile
+            }
+          }
+        );
+        return;
+      }
+
+      // Generate document title from filename
+      const title = file.name
+        .replace(/\.(docx|txt)$/i, '') // Remove file extension
+        .replace(/[_-]/g, ' ') // Replace underscores and hyphens with spaces
+        .replace(/\s+/g, ' ') // Remove multiple spaces
+        .trim()
+        || 'Uploaded Document';
+
+      // Prepare document data for creation
+      const documentData: CreateDocumentData = {
+        title,
+        content,
+        contentType: 'other' // Default content type for uploaded documents
+      };
+
+      // Create the document via backend
+      const newDocument = await DocumentService.createDocument(documentData);
+
+      // Add the new document to the local state (at the beginning of the list)
+      setDocuments(prev => [newDocument, ...prev]);
+
+      // Show success notification
+      showSuccess(
+        'Upload Successful',
+        `"${title}" has been uploaded and is ready for editing.`,
+        {
+          action: {
+            label: 'Open Document',
+            onClick: () => navigate(`/editor/${newDocument.id}`)
+          }
+        }
+      );
+
+      console.log('Document uploaded successfully:', newDocument.id);
+
+    } catch (error) {
+      console.error('Error uploading document:', error);
+
+      let errorMessage = 'An unexpected error occurred while uploading the document.';
+
+      if (error instanceof Error) {
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (error.message.includes('authentication') || error.message.includes('unauthorized')) {
+          errorMessage = 'Authentication error. Please sign in again and try uploading.';
+        } else if (error.message.includes('parse') || error.message.includes('mammoth')) {
+          errorMessage = 'Failed to parse the Word document. The file may be corrupted or in an unsupported format.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      showError(
+        'Upload Failed',
+        errorMessage,
+        {
+          action: {
+            label: 'Try Again',
+            onClick: handleUploadFile
+          }
+        }
+      );
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleDocumentClick = (document: Document) => {
     navigate(`/editor/${document.id}`);
   };
 
-      const handleDownload = (doc: Document) => {
+  const handleDownload = (doc: Document) => {
     try {
       // Create a blob with the document content
       const blob = new Blob([doc.content], { type: 'text/plain' });
@@ -355,7 +506,7 @@ const DocumentsDashboard: React.FC = () => {
           fetchMoreDocuments();
         }
 
-                console.log('Document deleted successfully:', doc.id);
+        console.log('Document deleted successfully:', doc.id);
 
         // Success notification - Task 22.3
         showSuccess(
@@ -385,9 +536,19 @@ const DocumentsDashboard: React.FC = () => {
     }
   };
 
-    return (
+  return (
     <DashboardLayout>
       <div className="h-full flex flex-col">
+        {/* Hidden file input for Word document uploads */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".docx,.txt"
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+          aria-label="Upload Word document or text file"
+        />
+
         {/* Content Header */}
         <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
           <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
@@ -413,10 +574,20 @@ const DocumentsDashboard: React.FC = () => {
               <div className="flex space-x-2">
                 <button
                   onClick={handleUploadFile}
-                  className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  disabled={uploading}
+                  className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <ArrowUpTrayIcon className="h-4 w-4 mr-1" />
-                  Upload
+                  {uploading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-1"></div>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpTrayIcon className="h-4 w-4 mr-1" />
+                      Upload
+                    </>
+                  )}
                 </button>
 
                 <button
@@ -458,10 +629,20 @@ const DocumentsDashboard: React.FC = () => {
               {/* Upload button */}
               <button
                 onClick={handleUploadFile}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                disabled={uploading}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
-                Upload file
+                {uploading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
+                    Upload (.docx/.txt)
+                  </>
+                )}
               </button>
 
               {/* New document button */}

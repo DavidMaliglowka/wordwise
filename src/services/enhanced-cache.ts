@@ -425,6 +425,8 @@ export class GrammarCache extends EnhancedCache<any> {
     includeStyle?: boolean;
     language?: string;
     userTier?: string;
+    enhancePassiveVoice?: boolean;
+    priority?: 'fast' | 'quality' | 'balanced';
   }): string {
     return this.generateKey(text, {
       ...options,

@@ -170,37 +170,37 @@ const theme = {
   // Define the theme for the editor
   ltr: 'ltr',
   rtl: 'rtl',
-  placeholder: 'text-gray-400 text-sm sm:text-base',
-  paragraph: 'mb-2 text-base leading-relaxed',
-  quote: 'border-l-4 border-gray-300 pl-4 italic text-base leading-relaxed',
+  placeholder: 'text-gray-500 text-base sm:text-lg select-none pointer-events-none',
+  paragraph: 'mb-4 text-base sm:text-lg leading-relaxed text-gray-900 font-normal',
+  quote: 'border-l-4 border-indigo-400 pl-6 py-2 my-6 italic text-base sm:text-lg leading-relaxed text-gray-700 bg-gray-50 rounded-r-lg',
   heading: {
-    h1: 'text-xl sm:text-2xl font-bold mb-3 sm:mb-4 leading-tight',
-    h2: 'text-lg sm:text-xl font-semibold mb-2 sm:mb-3 leading-tight',
-    h3: 'text-base sm:text-lg font-medium mb-2 leading-tight',
+    h1: 'text-2xl sm:text-3xl lg:text-4xl font-bold mb-6 sm:mb-8 leading-tight text-gray-900 border-b border-gray-200 pb-3',
+    h2: 'text-xl sm:text-2xl lg:text-3xl font-semibold mb-4 sm:mb-6 leading-tight text-gray-900 mt-8 first:mt-0',
+    h3: 'text-lg sm:text-xl lg:text-2xl font-medium mb-3 sm:mb-4 leading-tight text-gray-900 mt-6 first:mt-0',
   },
   list: {
     nested: {
       listitem: 'list-none',
     },
-    ol: 'list-decimal list-inside text-base leading-relaxed',
-    ul: 'list-disc list-inside text-base leading-relaxed',
-    listitem: 'mb-1',
+    ol: 'list-decimal list-outside ml-6 text-base sm:text-lg leading-relaxed text-gray-900 space-y-2',
+    ul: 'list-disc list-outside ml-6 text-base sm:text-lg leading-relaxed text-gray-900 space-y-2',
+    listitem: 'mb-2 pl-2',
   },
-  link: 'text-blue-600 underline hover:text-blue-800 break-words',
+  link: 'text-indigo-600 underline decoration-2 underline-offset-2 hover:text-indigo-800 hover:decoration-indigo-800 break-words transition-colors duration-150 cursor-pointer',
   text: {
-    bold: 'font-bold',
+    bold: 'font-bold text-gray-900',
     italic: 'italic',
-    underline: 'underline',
-    strikethrough: 'line-through',
-    code: 'bg-gray-100 px-1 py-0.5 rounded text-sm font-mono',
+    underline: 'underline decoration-2 underline-offset-2',
+    strikethrough: 'line-through decoration-2',
+    code: 'bg-gray-100 text-gray-800 px-2 py-1 rounded-md text-sm font-mono border border-gray-200',
   },
-  // Grammar mark styles (applied via className in GrammarMarkNode)
+  // Enhanced grammar mark styles with better visual hierarchy
   grammarMark: {
-    base: 'cursor-pointer rounded transition-colors',
-    spelling: 'bg-red-100 text-red-800 border-b-2 border-red-300 hover:bg-red-200',
-    grammar: 'bg-yellow-100 text-yellow-800 border-b-2 border-yellow-300 hover:bg-yellow-200',
-    punctuation: 'bg-orange-100 text-orange-800 border-b-2 border-orange-300 hover:bg-orange-200',
-    style: 'bg-blue-100 text-blue-800 border-b-2 border-blue-300 hover:bg-blue-200',
+    base: 'cursor-pointer rounded-sm transition-all duration-200 hover:shadow-sm',
+    spelling: 'bg-red-50 text-red-900 border-b-2 border-red-400 hover:bg-red-100 hover:border-red-500',
+    grammar: 'bg-amber-50 text-amber-900 border-b-2 border-amber-400 hover:bg-amber-100 hover:border-amber-500',
+    punctuation: 'bg-orange-50 text-orange-900 border-b-2 border-orange-400 hover:bg-orange-100 hover:border-orange-500',
+    style: 'bg-blue-50 text-blue-900 border-b-2 border-blue-400 hover:bg-blue-100 hover:border-blue-500',
   },
 };
 
@@ -305,10 +305,21 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
             <RichTextPlugin
               contentEditable={
                 <ContentEditable
-                  className={`min-h-[200px] p-3 sm:p-4 focus:outline-none resize-none ${!readOnly ? 'pb-16 sm:pb-20' : ''} ${readOnly ? 'cursor-default' : ''} text-base leading-relaxed`}
+                  className={`
+                    min-h-[300px] sm:min-h-[400px]
+                    p-6 sm:p-8 lg:p-12
+                    focus:outline-none resize-none
+                    ${!readOnly ? 'pb-20 sm:pb-24' : ''}
+                    ${readOnly ? 'cursor-default' : 'cursor-text'}
+                    text-base sm:text-lg leading-relaxed
+                    bg-white
+                    selection:bg-indigo-100 selection:text-indigo-900
+                    prose prose-lg max-w-none
+                    font-serif
+                  `}
                   aria-placeholder={placeholder}
                   placeholder={
-                    <div className="absolute top-3 sm:top-4 left-3 sm:left-4 text-gray-400 text-sm pointer-events-none">
+                    <div className="absolute top-6 sm:top-8 lg:top-12 left-6 sm:left-8 lg:left-12 text-gray-500 text-base sm:text-lg pointer-events-none select-none font-serif">
                       {placeholder}
                     </div>
                   }

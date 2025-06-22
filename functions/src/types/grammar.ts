@@ -7,7 +7,7 @@ export interface TextRange {
 
 export interface GrammarSuggestion {
   range: TextRange;
-  type: 'grammar' | 'spelling' | 'punctuation' | 'style';
+  type: 'grammar' | 'spelling' | 'punctuation' | 'style' | 'passive';
   original: string;
   proposed: string;
   explanation: string;

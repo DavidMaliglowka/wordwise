@@ -17,7 +17,7 @@ const cache = new NodeCache({
  */
 export function generateTextHash(
   text: string,
-  options: { language?: string; includeSpelling?: boolean; includeGrammar?: boolean; includeStyle?: boolean } = {}
+  options: { language?: string; includeSpelling?: boolean; includeGrammar?: boolean; includeStyle?: boolean; enhancePassiveVoice?: boolean } = {}
 ): string {
   const normalizedText = text.trim().toLowerCase();
   const optionsString = JSON.stringify(options);

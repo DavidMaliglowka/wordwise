@@ -101,9 +101,9 @@ const LinkDialog: React.FC<LinkDialogProps> = ({ isOpen, onClose, onSubmit, init
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-md mx-4">
-        <h3 className="text-lg font-semibold mb-4">Add Link</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-md mx-4 border border-gray-200">
+        <h3 className="text-xl font-bold mb-6 text-gray-900">Add Link</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -114,7 +114,7 @@ const LinkDialog: React.FC<LinkDialogProps> = ({ isOpen, onClose, onSubmit, init
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 text-base transition-all duration-200"
               autoFocus
               required
             />
@@ -123,13 +123,13 @@ const LinkDialog: React.FC<LinkDialogProps> = ({ isOpen, onClose, onSubmit, init
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 order-2 sm:order-1"
+              className="px-6 py-3 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 order-2 sm:order-1 transition-all duration-200"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 order-1 sm:order-2"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 hover:shadow-lg order-1 sm:order-2 transition-all duration-200 font-medium"
             >
               Add Link
             </button>
@@ -484,71 +484,86 @@ const EditorToolbar: React.FC<ToolbarProps> = ({ className = '' }) => {
     isActive?: boolean;
     children: React.ReactNode;
     title: string;
-  }> = ({ onClick, isActive = false, children, title }) => (
+    variant?: 'default' | 'primary';
+  }> = ({ onClick, isActive = false, children, title, variant = 'default' }) => (
     <button
       type="button"
       onClick={onClick}
       title={title}
       className={`
-        px-2 py-1 rounded border text-sm font-medium
-        transition-colors duration-150 min-w-[32px] h-8
+        relative px-3 py-2 rounded-lg text-sm font-medium
+        transition-all duration-200 min-w-[40px] h-10
+        flex items-center justify-center
+        hover:scale-105 active:scale-95
+        focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1
         ${isActive
-          ? 'bg-blue-600 text-white border-blue-600'
-          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+          ? variant === 'primary'
+            ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700 hover:shadow-lg'
+            : 'bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-sm hover:bg-indigo-200'
+          : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm'
         }
+        disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
       `}
     >
       {children}
+      {isActive && (
+        <div className="absolute -bottom-0.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-indigo-500 rounded-full"></div>
+      )}
     </button>
   );
 
   return (
     <>
-      <div className={`bg-white shadow-lg ${className}`}>
+      <div className={`bg-white border-t border-gray-200 shadow-xl backdrop-blur-sm ${className}`}>
         {/* Mobile Toolbar */}
-        <div className="sm:hidden px-4 py-2 overflow-x-auto flex justify-center">
-          <div className="flex items-center gap-1 min-w-max">
+        <div className="sm:hidden px-4 py-3 overflow-x-auto flex justify-center">
+          <div className="flex items-center gap-2 min-w-max">
             {/* Essential formatting - always visible */}
             <ToolbarButton
               onClick={() => formatText('bold')}
               isActive={isBold}
               title="Bold"
+              variant={isBold ? 'primary' : 'default'}
             >
-              <strong>B</strong>
+              <strong className="text-sm">B</strong>
             </ToolbarButton>
 
             <ToolbarButton
               onClick={() => formatText('italic')}
               isActive={isItalic}
               title="Italic"
+              variant={isItalic ? 'primary' : 'default'}
             >
-              <em>I</em>
+              <em className="text-sm font-serif">I</em>
             </ToolbarButton>
 
             <ToolbarButton
               onClick={() => formatHeading('h1')}
               isActive={blockType === 'h1'}
-              title="Heading"
+              title="Heading 1"
+              variant={blockType === 'h1' ? 'primary' : 'default'}
             >
-              H1
+              <span className="text-sm font-bold">H₁</span>
             </ToolbarButton>
 
             <ToolbarButton
               onClick={insertUnorderedList}
               isActive={blockType === 'bullet'}
-              title="List"
+              title="Bullet List"
+              variant={blockType === 'bullet' ? 'primary' : 'default'}
             >
-              •
+              <span className="text-base">•</span>
             </ToolbarButton>
 
-            <div className="w-px h-6 bg-gray-300 mx-1" />
+            <div className="w-px h-7 bg-gray-300 mx-3 rounded-full" />
 
             <ToolbarButton
               onClick={handleLinkButtonClick}
               isActive={isLink}
-              title="Link"
+              title="Insert Link"
+              variant={isLink ? 'primary' : 'default'}
             >
-              🔗
+              <span className="text-sm">🔗</span>
             </ToolbarButton>
 
             <ToolbarButton
@@ -602,22 +617,24 @@ const EditorToolbar: React.FC<ToolbarProps> = ({ className = '' }) => {
 
         {/* Desktop Toolbar */}
         <div className="hidden sm:block">
-          <div className="px-4 sm:px-6 py-2 flex items-center justify-center gap-1">
+          <div className="px-6 py-4 flex items-center justify-center gap-3">
             {/* Text formatting */}
             <ToolbarButton
               onClick={() => formatText('bold')}
               isActive={isBold}
               title="Bold (Ctrl+B)"
+              variant={isBold ? 'primary' : 'default'}
             >
-              <strong>B</strong>
+              <strong className="text-sm">B</strong>
             </ToolbarButton>
 
             <ToolbarButton
               onClick={() => formatText('italic')}
               isActive={isItalic}
               title="Italic (Ctrl+I)"
+              variant={isItalic ? 'primary' : 'default'}
             >
-              <em>I</em>
+              <em className="text-sm font-serif">I</em>
             </ToolbarButton>
 
             <ToolbarButton
@@ -637,23 +654,25 @@ const EditorToolbar: React.FC<ToolbarProps> = ({ className = '' }) => {
             </ToolbarButton>
 
             {/* Separator */}
-            <div className="w-px h-6 bg-gray-300 mx-1" />
+            <div className="w-px h-7 bg-gray-300 mx-3 rounded-full" />
 
             {/* Headings */}
             <ToolbarButton
               onClick={() => formatHeading('h1')}
               isActive={blockType === 'h1'}
               title="Heading 1"
+              variant={blockType === 'h1' ? 'primary' : 'default'}
             >
-              H1
+              <span className="text-sm font-bold">H₁</span>
             </ToolbarButton>
 
             <ToolbarButton
               onClick={() => formatHeading('h2')}
               isActive={blockType === 'h2'}
               title="Heading 2"
+              variant={blockType === 'h2' ? 'primary' : 'default'}
             >
-              H2
+              <span className="text-sm font-semibold">H₂</span>
             </ToolbarButton>
 
             <ToolbarButton
@@ -665,35 +684,38 @@ const EditorToolbar: React.FC<ToolbarProps> = ({ className = '' }) => {
             </ToolbarButton>
 
             {/* Separator */}
-            <div className="w-px h-6 bg-gray-300 mx-1" />
+            <div className="w-px h-7 bg-gray-300 mx-3 rounded-full" />
 
             {/* Lists */}
             <ToolbarButton
               onClick={insertUnorderedList}
               isActive={blockType === 'bullet'}
               title="Bullet List"
+              variant={blockType === 'bullet' ? 'primary' : 'default'}
             >
-              •
+              <span className="text-base">•</span>
             </ToolbarButton>
 
             <ToolbarButton
               onClick={insertOrderedList}
               isActive={blockType === 'number'}
               title="Numbered List"
+              variant={blockType === 'number' ? 'primary' : 'default'}
             >
-              1.
+              <span className="text-sm font-medium">1.</span>
             </ToolbarButton>
 
             {/* Separator */}
-            <div className="w-px h-6 bg-gray-300 mx-1" />
+            <div className="w-px h-7 bg-gray-300 mx-3 rounded-full" />
 
             {/* Link */}
             <ToolbarButton
               onClick={handleLinkButtonClick}
               isActive={isLink}
               title="Insert Link"
+              variant={isLink ? 'primary' : 'default'}
             >
-              🔗
+              <span className="text-sm">🔗</span>
             </ToolbarButton>
 
             {/* Clear formatting */}

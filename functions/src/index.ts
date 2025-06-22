@@ -56,7 +56,21 @@ const grammarCheckSchema = z.object({
   includeGrammar: z.boolean().optional().default(true),
   includeStyle: z.boolean().optional().default(false),
   stream: z.boolean().optional().default(false),
+  enhancePassiveVoice: z.boolean().optional().default(false),
 });
+
+// Personal Dictionary validation schemas
+const addDictionaryTermSchema = z.object({
+  word: z.string().min(1).max(100).trim(),
+  category: z.enum(['technical', 'domain', 'name', 'custom']).optional().default('custom'),
+  notes: z.string().max(500).optional(),
+});
+
+const removeDictionaryTermSchema = z.object({
+  word: z.string().min(1).max(100).trim(),
+});
+
+
 
 /**
  * Verify Firebase Auth token and return user ID
@@ -492,7 +506,7 @@ export const checkGrammar = onRequest({
       return sendError(res, 400, "Invalid request data", validationResult.error.errors, req);
     }
 
-    const { text, language, includeSpelling, includeGrammar, includeStyle, stream } = validationResult.data;
+    const { text, language, includeSpelling, includeGrammar, includeStyle, stream, enhancePassiveVoice } = validationResult.data;
 
     const startTime = Date.now();
 
@@ -501,7 +515,8 @@ export const checkGrammar = onRequest({
       language,
       includeSpelling,
       includeGrammar,
-      includeStyle
+      includeStyle,
+      enhancePassiveVoice
     });
 
     // Check cache first
@@ -539,7 +554,7 @@ export const checkGrammar = onRequest({
       try {
         suggestions = await checkGrammarWithOpenAIStreaming(
           text,
-          { includeSpelling, includeGrammar, includeStyle },
+          { includeSpelling, includeGrammar, includeStyle, enhancePassiveVoice },
           (chunk: string) => {
             // Send streaming chunks to client
             res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
@@ -581,7 +596,8 @@ export const checkGrammar = onRequest({
       const suggestions = await checkGrammarWithOpenAI(text, {
         includeSpelling,
         includeGrammar,
-        includeStyle
+        includeStyle,
+        enhancePassiveVoice
       });
 
       // Cache the result
@@ -631,7 +647,107 @@ export const checkGrammar = onRequest({
   }
 });
 
+// Passive Voice Enhancement Schema
+const passiveVoiceEnhancementSchema = z.object({
+  sentences: z.array(z.string()).min(1).max(10), // Max 10 sentences for performance
+  language: z.string().optional().default('en'),
+});
 
+/**
+ * Enhance passive voice sentences with active voice alternatives
+ * POST /enhancePassiveVoice
+ */
+export const enhancePassiveVoice = onRequest({
+  invoker: 'public',
+  secrets: [openaiApiKey]
+}, async (req, res) => {
+  try {
+    setCorsHeaders(res, req);
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== "POST") {
+      return sendError(res, 405, "Method not allowed", null, req);
+    }
+
+    // Verify authentication
+    const uid = await verifyAuth(req);
+
+    // Validate request body
+    const validationResult = passiveVoiceEnhancementSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return sendError(res, 400, "Invalid request data", validationResult.error.errors, req);
+    }
+
+    const { sentences } = validationResult.data;
+    const startTime = Date.now();
+
+    try {
+      // Process each sentence for passive voice enhancement
+      const enhancedSentences = [];
+
+      for (const sentence of sentences) {
+        // Use the existing checkGrammarWithOpenAI function with passive voice enhancement
+        const suggestions = await checkGrammarWithOpenAI(sentence, {
+          includeSpelling: false,
+          includeGrammar: false,
+          includeStyle: false,
+          enhancePassiveVoice: true
+        });
+
+        // Find passive voice suggestions
+        const passiveSuggestions = suggestions.filter(s => s.type === 'passive');
+
+        enhancedSentences.push({
+          original: sentence,
+          suggestions: passiveSuggestions,
+          hasPassiveVoice: passiveSuggestions.length > 0
+        });
+      }
+
+      const response = {
+        sentences: enhancedSentences,
+        processingTimeMs: Date.now() - startTime,
+        totalSentences: sentences.length,
+        passiveSentencesFound: enhancedSentences.filter(s => s.hasPassiveVoice).length
+      };
+
+      logger.info('Passive voice enhancement completed', {
+        uid,
+        totalSentences: sentences.length,
+        passiveSentencesFound: response.passiveSentencesFound,
+        processingTimeMs: response.processingTimeMs
+      });
+
+      res.status(200).json({
+        success: true,
+        data: response
+      });
+
+    } catch (error: any) {
+      logger.error('Passive voice enhancement failed:', error);
+
+      // Handle specific OpenAI errors
+      if (error.message.includes('authentication failed')) {
+        return sendError(res, 401, "AI service authentication failed", null, req);
+      } else if (error.message.includes('rate limit')) {
+        return sendError(res, 429, "AI service rate limit exceeded", null, req);
+      }
+
+      return sendError(res, 500, "Passive voice enhancement failed", error.message, req);
+    }
+
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") {
+      return sendError(res, 401, "Unauthorized", null, req);
+    }
+    return sendError(res, 500, "Internal server error", error.message, req);
+  }
+});
 
 /**
  * Verify if user is admin (checks admin field in users collection)
@@ -775,6 +891,224 @@ export const updateFeatureFlags = onRequest({
     }
     if (error.message === "FORBIDDEN") {
       return sendError(res, 403, "Admin access required", null, req);
+    }
+    return sendError(res, 500, "Internal server error", error.message, req);
+  }
+});
+
+/**
+ * Add a word to user's personal dictionary
+ * POST /addDictionaryTerm
+ */
+export const addDictionaryTerm = onRequest({
+  invoker: 'public'
+}, async (req, res) => {
+  try {
+    setCorsHeaders(res, req);
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== "POST") {
+      return sendError(res, 405, "Method not allowed", null, req);
+    }
+
+    // Verify authentication
+    const uid = await verifyAuth(req);
+
+    // Validate request body
+    const validationResult = addDictionaryTermSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return sendError(res, 400, "Invalid request data", validationResult.error.errors, req);
+    }
+
+    const { word, category, notes } = validationResult.data;
+    const normalizedWord = word.toLowerCase().trim();
+
+    // Get user document
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      // Create user document if it doesn't exist
+      await userRef.set({
+        uid,
+        dictionary: [],
+        createdAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now()
+      });
+    }
+
+    const userData = userDoc.data();
+    const currentDictionary = userData?.dictionary || [];
+
+    // Check if word already exists
+    if (currentDictionary.includes(normalizedWord)) {
+      return sendError(res, 409, "Word already exists in dictionary", null, req);
+    }
+
+    // Add word to dictionary array
+    const updatedDictionary = [...currentDictionary, normalizedWord];
+
+    await userRef.update({
+      dictionary: updatedDictionary,
+      updatedAt: admin.firestore.Timestamp.now()
+    });
+
+    logger.info(`Added word to personal dictionary: ${normalizedWord} for user: ${uid}`);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        word: normalizedWord,
+        category,
+        notes,
+        addedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") {
+      return sendError(res, 401, "Unauthorized", null, req);
+    }
+    return sendError(res, 500, "Internal server error", error.message, req);
+  }
+});
+
+/**
+ * Remove a word from user's personal dictionary
+ * DELETE /removeDictionaryTerm
+ */
+export const removeDictionaryTerm = onRequest({
+  invoker: 'public'
+}, async (req, res) => {
+  try {
+    setCorsHeaders(res, req);
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== "DELETE") {
+      return sendError(res, 405, "Method not allowed", null, req);
+    }
+
+    // Verify authentication
+    const uid = await verifyAuth(req);
+
+    // Validate request body
+    const validationResult = removeDictionaryTermSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return sendError(res, 400, "Invalid request data", validationResult.error.errors, req);
+    }
+
+    const { word } = validationResult.data;
+    const normalizedWord = word.toLowerCase().trim();
+
+    // Get user document
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      return sendError(res, 404, "User not found", null, req);
+    }
+
+    const userData = userDoc.data();
+    const currentDictionary = userData?.dictionary || [];
+
+    // Check if word exists
+    if (!currentDictionary.includes(normalizedWord)) {
+      return sendError(res, 404, "Word not found in dictionary", null, req);
+    }
+
+    // Remove word from dictionary array
+    const updatedDictionary = currentDictionary.filter((w: string) => w !== normalizedWord);
+
+    await userRef.update({
+      dictionary: updatedDictionary,
+      updatedAt: admin.firestore.Timestamp.now()
+    });
+
+    logger.info(`Removed word from personal dictionary: ${normalizedWord} for user: ${uid}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Word removed from dictionary",
+      data: {
+        word: normalizedWord,
+        removedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") {
+      return sendError(res, 401, "Unauthorized", null, req);
+    }
+    return sendError(res, 500, "Internal server error", error.message, req);
+  }
+});
+
+/**
+ * Get user's personal dictionary
+ * GET /getDictionary
+ */
+export const getDictionary = onRequest({
+  invoker: 'public'
+}, async (req, res) => {
+  try {
+    setCorsHeaders(res, req);
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    if (req.method !== "GET") {
+      return sendError(res, 405, "Method not allowed", null, req);
+    }
+
+    // Verify authentication
+    const uid = await verifyAuth(req);
+
+    // Get user document
+    const userRef = db.collection('users').doc(uid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      res.status(200).json({
+        success: true,
+        data: {
+          dictionary: [],
+          totalWords: 0,
+          lastUpdated: null
+        }
+      });
+      return;
+    }
+
+    const userData = userDoc.data();
+    const dictionary = userData?.dictionary || [];
+
+    logger.info(`Retrieved personal dictionary for user: ${uid}, words: ${dictionary.length}`);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        dictionary,
+        totalWords: dictionary.length,
+        lastUpdated: userData?.updatedAt?.toDate()?.toISOString() || null
+      }
+    });
+
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") {
+      return sendError(res, 401, "Unauthorized", null, req);
     }
     return sendError(res, 500, "Internal server error", error.message, req);
   }

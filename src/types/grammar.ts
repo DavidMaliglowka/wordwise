@@ -5,7 +5,7 @@ export interface GrammarRange {
   end: number;
 }
 
-export type GrammarSuggestionType = 'grammar' | 'spelling' | 'punctuation' | 'style';
+export type GrammarSuggestionType = 'grammar' | 'spelling' | 'punctuation' | 'style' | 'passive';
 
 // Grammarly-style categories for UI organization
 export type GrammarCategory = 'correctness' | 'clarity' | 'engagement' | 'delivery';
