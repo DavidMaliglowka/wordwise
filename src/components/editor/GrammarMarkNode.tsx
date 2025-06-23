@@ -1,30 +1,37 @@
-import React from 'react';
-import {
-  $createMarkNode,
-  $isMarkNode,
-  MarkNode,
-  SerializedMarkNode,
-} from '@lexical/mark';
 import {
   $applyNodeReplacement,
-  DOMConversionMap,
-  DOMConversionOutput,
-  DOMExportOutput,
-  EditorConfig,
   LexicalNode,
   NodeKey,
-  SerializedLexicalNode,
+  EditorConfig,
   Spread,
+  $isTextNode,
+  TextNode,
+  BaseSelection,
 } from 'lexical';
-import { GrammarSuggestionType } from '../../types/grammar';
+import {
+  MarkNode,
+  $isMarkNode,
+  $unwrapMarkNode,
+  SerializedMarkNode, // Import SerializedMarkNode from @lexical/mark
+} from '@lexical/mark';
 
-export interface SerializedGrammarMarkNode extends SerializedMarkNode {
-  suggestionType: GrammarSuggestionType;
+export type GrammarMarkNodeProps = {
+  suggestionType: string;
   suggestionId: string;
-}
+};
 
+// Define the shape of the serialized node data
+export type SerializedGrammarMarkNode = Spread<
+  {
+    suggestionType: string;
+    suggestionId: string;
+  },
+  SerializedMarkNode
+>;
+
+// We extend the base MarkNode to add our custom properties.
 export class GrammarMarkNode extends MarkNode {
-  __suggestionType: GrammarSuggestionType;
+  __suggestionType: string;
   __suggestionId: string;
 
   static getType(): string {
@@ -32,16 +39,39 @@ export class GrammarMarkNode extends MarkNode {
   }
 
   static clone(node: GrammarMarkNode): GrammarMarkNode {
-    return new GrammarMarkNode([...node.__ids], node.__suggestionType, node.__suggestionId, node.__key);
+    return new GrammarMarkNode(node.__suggestionType, node.__suggestionId, [...node.getIDs()], node.getKey());
   }
 
-  constructor(ids: string[], suggestionType: GrammarSuggestionType, suggestionId: string, key?: NodeKey) {
-    super([...ids], key); // Convert readonly to mutable array
+  // Method to serialize the node to JSON
+  exportJSON(): SerializedGrammarMarkNode {
+    return {
+      ...super.exportJSON(),
+      suggestionId: this.getSuggestionId(),
+      suggestionType: this.getSuggestionType(),
+      type: 'grammar-mark', // Ensure type is included
+      version: 1,
+    };
+  }
+
+  // Method to deserialize the node from JSON
+  static importJSON(serializedNode: SerializedGrammarMarkNode): GrammarMarkNode {
+    const node = $createGrammarMarkNode(
+      serializedNode.suggestionType,
+      serializedNode.suggestionId
+    );
+    // The generic MarkNode handles the 'ids' array itself,
+    // so we don't need to manually set it here.
+    return node;
+  }
+
+  constructor(suggestionType: string, suggestionId: string, ids?: string[], key?: NodeKey) {
+    // The first ID in the array is what MarkNode uses internally. We'll use our unique suggestionId.
+    super(ids || [suggestionId], key);
     this.__suggestionType = suggestionType;
     this.__suggestionId = suggestionId;
   }
 
-  getSuggestionType(): GrammarSuggestionType {
+  getSuggestionType(): string {
     return this.__suggestionType;
   }
 
@@ -49,119 +79,98 @@ export class GrammarMarkNode extends MarkNode {
     return this.__suggestionId;
   }
 
+  /**
+   * This is the key to fixing the "sticky mark" behavior.
+   * By returning true, we tell Lexical that this node is a "segment" or "token".
+   * When the user types at the end of a segmented node, Lexical will correctly
+   * create the new text *outside* of this node, allowing the user to "escape" the mark.
+   */
+  static isSegmented(): boolean {
+    return true;
+  }
+
+  /**
+   * This is the modern companion to isSegmented(). It ensures that complex
+   * operations like copy-pasting from a selection that partially includes this
+   * node behave correctly. It tells Lexical how to "extract" a child node
+   * when creating a new copy of this parent node.
+   */
+  extractWithChild(
+    child: LexicalNode,
+    selection: BaseSelection,
+    destination: 'clone' | 'html',
+  ): boolean {
+    const isText = $isTextNode(child);
+    if (!isText) {
+      return false;
+    }
+    // Return true to indicate that the child (the TextNode) can be
+    // "pulled out" of this GrammarMarkNode during copy-paste operations.
+    return true;
+  }
+
+  // This is how Lexical creates the DOM element.
   createDOM(config: EditorConfig): HTMLElement {
-    const element = document.createElement('span');
-
-    // Add base grammar mark classes
-    element.className = this.getMarkClasses();
-
-    // Add data attributes for interaction
+    const element = super.createDOM(config);
+    // Add data attributes for the hover card and styling
     element.dataset.suggestionId = this.__suggestionId;
     element.dataset.suggestionType = this.__suggestionType;
-    element.setAttribute('role', 'mark');
-    element.setAttribute('aria-describedby', `grammar-suggestion-${this.__suggestionId}`);
+
+    const theme = config.theme.grammarMark;
+
+    // FIX: Split the string of classes and add them one by one.
+    if (theme && theme[this.__suggestionType]) {
+      const classes = theme[this.__suggestionType].split(' ');
+      element.classList.add(...classes);
+    }
+    if (theme && theme.base) {
+      const classes = theme.base.split(' ');
+      element.classList.add(...classes);
+    }
 
     return element;
   }
 
-  updateDOM(): boolean {
-    // Return false to indicate that the DOM should not be updated
-    return false;
-  }
+  // This is how Lexical updates the DOM element when the node changes.
+  updateDOM(
+    prevNode: this,
+    dom: HTMLElement,
+    config: EditorConfig,
+  ): boolean {
+    const theme = config.theme.grammarMark;
+    let needsUpdate = super.updateDOM(prevNode, dom, config);
 
-  private getMarkClasses(): string {
-    const baseClasses = 'grammar-mark cursor-pointer';
-
-    // Type-specific styling based on research findings
-    switch (this.__suggestionType) {
-      case 'spelling':
-        return `${baseClasses} bg-red-100 text-red-800 border-b-2 border-red-300 hover:bg-red-200 transition-colors`;
-      case 'grammar':
-        return `${baseClasses} bg-yellow-100 text-yellow-800 border-b-2 border-yellow-300 hover:bg-yellow-200 transition-colors`;
-      case 'punctuation':
-        return `${baseClasses} bg-orange-100 text-orange-800 border-b-2 border-orange-300 hover:bg-orange-200 transition-colors`;
-      case 'style':
-        return `${baseClasses} bg-blue-100 text-blue-800 border-b-2 border-blue-300 hover:bg-blue-200 transition-colors`;
-      default:
-        return `${baseClasses} bg-gray-100 text-gray-800 border-b-2 border-gray-300 hover:bg-gray-200 transition-colors`;
+    // If suggestion type changes, update the class
+    if (prevNode.__suggestionType !== this.__suggestionType) {
+      // FIX: Also split classes here for removal and addition.
+      if (theme && theme[prevNode.__suggestionType]) {
+        const oldClasses = theme[prevNode.__suggestionType].split(' ');
+        dom.classList.remove(...oldClasses);
+      }
+      if (theme && theme[this.__suggestionType]) {
+        const newClasses = theme[this.__suggestionType].split(' ');
+        dom.classList.add(...newClasses);
+      }
+      needsUpdate = true;
     }
+
+    return needsUpdate;
   }
-
-  // Note: MarkNode doesn't support importDOM, so we remove this method
-
-  exportDOM(): DOMExportOutput {
-    const element = this.createDOM({} as EditorConfig);
-    return { element };
-  }
-
-  static importJSON(serializedNode: SerializedGrammarMarkNode): GrammarMarkNode {
-    const { ids, suggestionType, suggestionId } = serializedNode;
-    const node = $createGrammarMarkNode(ids, suggestionType, suggestionId);
-    return node;
-  }
-
-  exportJSON(): SerializedGrammarMarkNode {
-    return {
-      ...super.exportJSON(),
-      ids: this.getIDs(),
-      suggestionType: this.__suggestionType,
-      suggestionId: this.__suggestionId,
-      type: 'grammar-mark',
-    };
-  }
-}
-
-function convertGrammarMarkElement(domNode: HTMLElement): DOMConversionOutput {
-  const suggestionId = domNode.getAttribute('data-suggestion-id') || '';
-  const suggestionType = (domNode.getAttribute('data-suggestion-type') as GrammarSuggestionType) || 'grammar';
-  const node = $createGrammarMarkNode(['grammar-mark'], suggestionType, suggestionId);
-  return { node };
 }
 
 export function $createGrammarMarkNode(
-  ids: string[],
-  suggestionType: GrammarSuggestionType,
-  suggestionId: string
+  suggestionType: string,
+  suggestionId: string,
 ): GrammarMarkNode {
-  return $applyNodeReplacement(new GrammarMarkNode(ids, suggestionType, suggestionId));
+  return $applyNodeReplacement(new GrammarMarkNode(suggestionType, suggestionId));
 }
 
 export function $isGrammarMarkNode(node: LexicalNode | null | undefined): node is GrammarMarkNode {
-  return node instanceof GrammarMarkNode;
+    return node instanceof GrammarMarkNode;
 }
 
-// Helper function to remove grammar marks
+// Helper function to remove a specific grammar mark by unwrapping it
 export function $removeGrammarMark(suggestionId: string): void {
-  // TODO: Implement proper node traversal for mark removal
-  // This will be enhanced in the next subtask with proper traversal logic
+  // This will be implemented in the GrammarPlugin refactor
   console.log(`Removing grammar mark with suggestion ID: ${suggestionId}`);
 }
-
-// Helper function to apply grammar marks to text ranges
-export function $applyGrammarMark(
-  startOffset: number,
-  endOffset: number,
-  suggestionType: GrammarSuggestionType,
-  suggestionId: string
-): void {
-  const root = $getRoot();
-  const textContent = root.getTextContent();
-
-  // Validate range
-  if (startOffset < 0 || endOffset > textContent.length || startOffset >= endOffset) {
-    return;
-  }
-
-  // For now, use a simple approach - this will be enhanced with proper position mapping
-  const selection = $getSelection();
-  if ($isRangeSelection(selection)) {
-    // Create mark node
-    const markNode = $createGrammarMarkNode(['grammar-mark'], suggestionType, suggestionId);
-
-    // This is a simplified implementation - proper text range selection will be added
-    console.log(`Applied grammar mark for suggestion ${suggestionId} at range ${startOffset}-${endOffset}`);
-  }
-}
-
-// Import required Lexical functions
-import { $getRoot, $getSelection, $isRangeSelection } from 'lexical';

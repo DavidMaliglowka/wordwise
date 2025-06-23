@@ -29,6 +29,9 @@ importers:
       '@lexical/mark':
         specifier: ^0.32.1
         version: 0.32.1
+      '@lexical/offset':
+        specifier: 0.32.1
+        version: 0.32.1
       '@lexical/plain-text':
         specifier: ^0.32.1
         version: 0.32.1

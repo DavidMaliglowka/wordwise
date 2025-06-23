@@ -12,7 +12,7 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { ListItemNode, ListNode } from '@lexical/list';
 import { LinkNode, AutoLinkNode } from '@lexical/link';
 import { $generateHtmlFromNodes } from '@lexical/html';
-import { $getRoot, EditorState, $createParagraphNode, $createTextNode } from 'lexical';
+import { $getRoot, EditorState, $createParagraphNode, $createTextNode, LexicalEditor as LexicalEditorType } from 'lexical';
 import EditorToolbar from './EditorToolbar';
 import { GrammarMarkNode } from './GrammarMarkNode';
 import { GrammarPlugin } from './GrammarPlugin';
@@ -29,6 +29,7 @@ export interface EditorStateData {
 
 export interface LexicalEditorRef {
   updateContent: (content: string) => void;
+  getEditor: () => LexicalEditorType | null;
 }
 
 interface LexicalEditorProps {
@@ -42,6 +43,7 @@ interface LexicalEditorProps {
   readOnly?: boolean;
   // Grammar-related props
   grammarSuggestions?: EditorSuggestion[];
+  lastCheckedTextForGrammar?: string;
   onGrammarSuggestionHover?: (suggestionId: string | null) => void;
   onGrammarSuggestionClick?: (suggestion: EditorSuggestion) => void;
   onApplyGrammarSuggestion?: (suggestion: EditorSuggestion) => void;
@@ -49,8 +51,6 @@ interface LexicalEditorProps {
   onRegenerateGrammarSuggestion?: (suggestionId: string) => void;
   onAddToDictionary?: (word: string) => void;
   isRegenerating?: boolean;
-  onGrammarMarkApplicationStart?: () => void;
-  onGrammarMarkApplicationEnd?: () => void;
 }
 
 // Hook to initialize content
@@ -207,6 +207,17 @@ const theme = {
   },
 };
 
+// Plugin to capture editor instance
+function EditorRefPlugin({ onEditorRef }: { onEditorRef: (editor: LexicalEditorType) => void }) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    onEditorRef(editor);
+  }, [editor, onEditorRef]);
+
+  return null;
+}
+
 const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   initialContent = '',
   placeholder = 'Type or paste (⌘+V)…',
@@ -217,6 +228,7 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   autoSaveDelay = 2000,
   readOnly = false,
   grammarSuggestions = [],
+  lastCheckedTextForGrammar = '',
   onGrammarSuggestionHover,
   onGrammarSuggestionClick,
   onApplyGrammarSuggestion,
@@ -224,12 +236,11 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   onRegenerateGrammarSuggestion,
   onAddToDictionary,
   isRegenerating = false,
-  onGrammarMarkApplicationStart,
-  onGrammarMarkApplicationEnd,
 }, ref) => {
   const [updateTrigger, setUpdateTrigger] = React.useState<{ content: string; timestamp: number } | null>(null);
   const [editorElement, setEditorElement] = useState<HTMLElement | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const editorInstanceRef = useRef<LexicalEditorType | null>(null);
 
   const initialConfig = {
     namespace: 'WordWiseEditor',
@@ -249,9 +260,11 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
     editable: !readOnly,
   };
 
-  const handleChange = useCallback((editorState: EditorState, editor: any) => {
+  const handleChange = useCallback((editorState: EditorState, editor: LexicalEditorType) => {
     if (onChange) {
-            editorState.read(() => {
+      // FIX: Use editor.read() instead of editorState.read() to get an active context.
+      editor.read(() => {
+        // Now this call to $getRoot() is safe.
         const root = $getRoot();
         const textContent = root.getTextContent();
 
@@ -262,7 +275,7 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
           characterCount: textContent.length,
           isEmpty: textContent.trim().length === 0,
         };
-
+        // Pass the derived data up to the parent component.
         onChange(stateData);
       });
     }
@@ -297,10 +310,16 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onSave]);
 
+  // Callback to capture editor instance
+  const handleEditorRef = useCallback((editor: LexicalEditorType) => {
+    editorInstanceRef.current = editor;
+  }, []);
+
   useImperativeHandle(ref, () => ({
     updateContent: (content: string) => {
       setUpdateTrigger({ content, timestamp: Date.now() });
     },
+    getEditor: () => editorInstanceRef.current,
   }));
 
   return (
@@ -350,13 +369,14 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
                 setUpdateTrigger(null);
               }}
             />
+            {/* Plugin to capture editor instance for ref */}
+            <EditorRefPlugin onEditorRef={handleEditorRef} />
             {/* Grammar Plugin for custom marks and interactions */}
             <GrammarPlugin
               suggestions={grammarSuggestions}
+              lastCheckedText={lastCheckedTextForGrammar}
               onSuggestionHover={onGrammarSuggestionHover}
               onSuggestionClick={onGrammarSuggestionClick}
-              onMarkApplicationStart={onGrammarMarkApplicationStart}
-              onMarkApplicationEnd={onGrammarMarkApplicationEnd}
             />
           </div>
           {!readOnly && (

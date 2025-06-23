@@ -95,22 +95,12 @@ const GrammarIntegrationTest: React.FC = () => {
     dismissSuggestion(suggestionId);
   }, [dismissSuggestion]);
 
-  // Handle clicking on a grammar mark (should NOT auto-apply)
   const handleGrammarMarkClick = useCallback((suggestion: EditorSuggestion) => {
     console.log('🖱️ Test: Grammar mark clicked:', suggestion.id);
     // Just log the click - don't auto-apply the suggestion
   }, []);
 
-  // Handle mark application coordination
-  const handleMarkApplicationStart = useCallback(() => {
-    console.log('🔧 Test: Mark application started');
-    isApplyingMarks.current = true;
-  }, []);
 
-  const handleMarkApplicationEnd = useCallback(() => {
-    console.log('🔧 Test: Mark application ended');
-    isApplyingMarks.current = false;
-  }, []);
 
   const getSuggestionTypeColor = (type: string) => {
     switch (type) {
@@ -324,8 +314,6 @@ const GrammarIntegrationTest: React.FC = () => {
             onGrammarSuggestionClick={handleGrammarMarkClick}
             onApplyGrammarSuggestion={handleApplySuggestion}
             onDismissGrammarSuggestion={handleDismissSuggestion}
-            onGrammarMarkApplicationStart={handleMarkApplicationStart}
-            onGrammarMarkApplicationEnd={handleMarkApplicationEnd}
           />
         </div>
 

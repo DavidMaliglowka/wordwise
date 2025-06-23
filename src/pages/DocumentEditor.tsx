@@ -13,6 +13,10 @@ import { ArrowLeft, Save, Clock, Zap, Brain, ChevronRight, ChevronLeft, ChevronD
 import { DocumentLengthDropdown, EstimatedTimeDropdown, ReadabilityTooltip } from '../components/MetricsComponents';
 import { calculateTextMetrics } from '../utils/textMetrics';
 import { personalDictionary } from '../services/personal-dictionary';
+// Import Lexical functions for suggestion application
+import { $dfs } from '@lexical/utils';
+import { $isGrammarMarkNode, GrammarMarkNode } from '../components/editor/GrammarMarkNode';
+import { $createTextNode, $hasUpdateTag } from 'lexical';
 
 const DocumentEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,8 +24,6 @@ const DocumentEditor: React.FC = () => {
   const { user } = useAuthContext();
   const editorRef = useRef<LexicalEditorRef>(null);
   const contentRef = useRef(''); // Ref to hold the latest content string
-  const isApplyingSuggestion = useRef(false);
-  const isApplyingMarks = useRef(false);
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -44,6 +46,7 @@ const DocumentEditor: React.FC = () => {
   // Hybrid grammar checking integration - faster and more cost-effective!
   const {
     suggestions,
+    lastCheckedText,
     isLoading: isGrammarLoading,
     isRefining: isGrammarRefining,
     error: grammarError,
@@ -70,77 +73,30 @@ const DocumentEditor: React.FC = () => {
     return GrammarService.categorizeSuggestions(suggestions);
   }, [suggestions]);
 
-    // Handle applying a suggestion
   const handleApplySuggestion = useCallback((suggestion: EditorSuggestion) => {
-    // Prevent concurrent applications to avoid race conditions
-    if (isApplyingSuggestion.current) {
-      console.warn('Skipping suggestion application, already in progress.');
-      return;
-    }
+    const editor = editorRef.current?.getEditor();
+    if (!editor) return;
 
-    isApplyingSuggestion.current = true;
-    console.log('🔧 HYBRID APPLY DEBUG: Starting suggestion application', {
-      suggestionId: suggestion.id,
-      original: suggestion.original,
-      proposed: suggestion.proposed,
-      currentContentLength: contentRef.current.length,
-      timestamp: new Date().toISOString()
+    editor.update(() => {
+      // Find the mark node by its suggestion ID and replace it.
+      const markToReplace = $dfs()
+        .map(({ node }) => node)
+        .find(node => $isGrammarMarkNode(node) && node.getSuggestionId() === suggestion.id);
+
+      if (markToReplace) {
+        const textNode = $createTextNode(suggestion.proposed);
+        markToReplace.replace(textNode);
+      } else {
+        console.warn(`Could not find mark to apply suggestion ${suggestion.id}`);
+      }
+    }, {
+      // Add the tag here!
+      tag: 'grammar-suggestion-apply'
     });
 
-    try {
-      // Use contentRef.current to ensure we have the latest text
-      const result = applySuggestion(suggestion.id, contentRef.current);
-
-      if (result && editorRef.current) {
-        console.log('🔧 HYBRID APPLY DEBUG: Suggestion applied successfully', {
-          oldTextLength: contentRef.current.length,
-          newTextLength: result.newText.length,
-          textChanged: result.newText !== contentRef.current
-        });
-
-        // Update the actual Lexical editor content
-        editorRef.current.updateContent(result.newText);
-
-        // Update the editor state and content ref
-        const newStateData = {
-          content: result.newText,
-          html: result.newText,
-          wordCount: result.newText.trim().split(/\s+/).filter(Boolean).length,
-          characterCount: result.newText.length,
-          isEmpty: result.newText.trim().length === 0,
-        };
-        setEditorState(newStateData);
-        contentRef.current = result.newText;
-
-        // Mark as having unsaved changes
-        setHasUnsavedChanges(true);
-
-        // Reset flag and trigger new grammar check after content is updated
-        setTimeout(() => {
-          console.log('🔧 HYBRID APPLY DEBUG: Resetting flag and triggering recheck');
-          isApplyingSuggestion.current = false;
-
-          // Trigger a fresh grammar check to update marks for the new content
-          if (result.newText && result.newText.trim().length > 0) {
-            console.log('🔄 HYBRID APPLY DEBUG: Triggering grammar recheck after suggestion application');
-            checkGrammar(result.newText);
-          } else {
-            console.log('🧹 HYBRID APPLY DEBUG: Clearing suggestions - no content remaining');
-            clearSuggestions();
-          }
-        }, 100); // Faster for hybrid approach
-      } else {
-        console.error('🚨 HYBRID APPLY DEBUG: Failed to apply suggestion or no editor ref', {
-          hasResult: !!result,
-          hasEditorRef: !!editorRef.current
-        });
-        isApplyingSuggestion.current = false;
-      }
-    } catch (error) {
-      console.error('🚨 HYBRID APPLY DEBUG: Error in handleApplySuggestion:', error);
-      isApplyingSuggestion.current = false;
-    }
-  }, [applySuggestion, checkGrammar, clearSuggestions]);
+    // Dismiss the suggestion from the UI state
+    dismissSuggestion(suggestion.id);
+  }, [dismissSuggestion]);
 
   // Handle refining a suggestion with GPT-4o (for sidebar - takes EditorSuggestion object)
   const handleRefineSuggestion = useCallback(async (suggestion: EditorSuggestion) => {
@@ -246,17 +202,7 @@ const DocumentEditor: React.FC = () => {
     }
   }, [user, clearSuggestions, checkGrammar, editorState.content]);
 
-  // Handle mark application start
-  const handleMarkApplicationStart = useCallback(() => {
-    console.log('🔧 Hybrid mark application started - blocking grammar checks');
-    isApplyingMarks.current = true;
-  }, []);
-
-  // Handle mark application end
-  const handleMarkApplicationEnd = useCallback(() => {
-    console.log('🔧 Hybrid mark application ended - allowing grammar checks');
-    isApplyingMarks.current = false;
-  }, []);
+  // Note: Mark application start/end handlers removed - now using tag system
 
   // Load document on mount
   useEffect(() => {
@@ -347,57 +293,35 @@ const DocumentEditor: React.FC = () => {
     loadDocument();
   }, [id, user, navigate, clearSuggestions, checkGrammar]);
 
-    // Handle editor content changes
+  // Handle editor content changes
   const handleEditorChange = useCallback((stateData: EditorStateData) => {
-    console.log('🔧 SAVE STATE DEBUG: handleEditorChange called', {
-      newContent: stateData.content,
-      newContentLength: stateData.content.length,
-      currentDocumentContent: document?.content || '',
-      currentDocumentContentLength: (document?.content || '').length,
-      contentChanged: stateData.content !== (document?.content || ''),
-      isApplyingSuggestion: isApplyingSuggestion.current,
-      isApplyingMarks: isApplyingMarks.current,
-      currentHasUnsavedChanges: hasUnsavedChanges,
-      timestamp: new Date().toISOString()
-    });
-
+    contentRef.current = stateData.content;
     setEditorState(stateData);
 
-    // Update content ref to have the latest text available for handlers
-    contentRef.current = stateData.content;
+    const editor = editorRef.current?.getEditor();
 
-    // Only set hasUnsavedChanges if content actually differs from saved document
+    // FIX: Use editor.read() to establish an active editor context.
+    editor?.read(() => {
+      // NOW this is safe to call, because we are inside editor.read().
+      if ($hasUpdateTag('apply-grammar-marks') || $hasUpdateTag('grammar-suggestion-apply')) {
+        console.log('⏸️ Skipping grammar check due to programmatic update.');
+        return;
+      }
+
+      // If we are here, the change was from the user.
+      if (stateData.content && stateData.content.trim().length > 0) {
+        checkGrammar(stateData.content);
+      } else {
+        clearSuggestions();
+      }
+    });
+
+    // This part is for saving, it's separate from the grammar check logic
     const contentChanged = stateData.content !== (document?.content || '');
     if (contentChanged) {
-      console.log('🔧 SAVE STATE DEBUG: Content changed - setting hasUnsavedChanges to true');
       setHasUnsavedChanges(true);
-    } else {
-      console.log('🔧 SAVE STATE DEBUG: Content unchanged - keeping current hasUnsavedChanges state');
     }
-
-    // Skip grammar checking if we're currently applying a suggestion or marks to prevent infinite loops
-    if (isApplyingSuggestion.current || isApplyingMarks.current) {
-      console.log('⏸️ Skipping grammar check - applying changes:', {
-        isApplyingSuggestion: isApplyingSuggestion.current,
-        isApplyingMarks: isApplyingMarks.current
-      });
-      return;
-    }
-
-    // Debug: Log text content details
-    if (stateData.content && stateData.content.trim().length > 0) {
-      console.log('🔧 Editor content changed:');
-      console.log('Content length:', stateData.content.length);
-      console.log('Trimmed length:', stateData.content.trim().length);
-      console.log('First 100 chars:', JSON.stringify(stateData.content.substring(0, 100)));
-      console.log('Character codes (first 20):', stateData.content.substring(0, 20).split('').map(c => c.charCodeAt(0)));
-
-      checkGrammar(stateData.content);
-    } else {
-      // Clear suggestions if content is empty
-      clearSuggestions();
-    }
-  }, [checkGrammar, clearSuggestions, document?.content, hasUnsavedChanges]);
+  }, [checkGrammar, clearSuggestions, document?.content]);
 
   // Save document
   const saveDocument = useCallback(async (stateData?: EditorStateData) => {
@@ -730,14 +654,14 @@ const DocumentEditor: React.FC = () => {
                 autoSaveDelay={2000}
                 className="min-h-[500px] sm:min-h-[600px]"
                 grammarSuggestions={suggestions}
+                lastCheckedTextForGrammar={lastCheckedText}
                 onGrammarSuggestionClick={handleGrammarMarkClick}
                 onApplyGrammarSuggestion={handleApplySuggestion}
                 onDismissGrammarSuggestion={handleDismissSuggestion}
                 onRegenerateGrammarSuggestion={handleRegenerateSuggestion}
                 onAddToDictionary={handleAddToDictionary}
                 isRegenerating={isGrammarRefining}
-                onGrammarMarkApplicationStart={handleMarkApplicationStart}
-                onGrammarMarkApplicationEnd={handleMarkApplicationEnd}
+
               />
             </div>
           </div>
