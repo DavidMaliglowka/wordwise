@@ -376,6 +376,7 @@ export class ClientGrammarEngine {
         } else if (isSpelling && message.expected) {
           const suggestions = Array.isArray(message.expected) ? message.expected : [message.expected];
           replacement = this.pickBestSuggestion(flaggedText, suggestions);
+          confidence = 60; // Lower confidence for initial spelling suggestions to trigger auto-refinement
         } else if (isSimplify && message.expected) {
           replacement = Array.isArray(message.expected) ? message.expected[0] : message.expected;
           confidence = 70;
@@ -590,14 +591,35 @@ export class HybridGrammarService {
     sentenceBoundaries: Array<{ start: number; end: number }>,
     text: string
   ): { text: string; range: { start: number; end: number } } | null {
+    console.log('🔍 SENTENCE DEBUG: Finding containing sentence', {
+      suggestionRange,
+      sentenceBoundariesCount: sentenceBoundaries.length,
+      textLength: text.length,
+      sentenceBoundaries: sentenceBoundaries.slice(0, 3) // Log first few boundaries
+    });
+
     for (const boundary of sentenceBoundaries) {
       if (suggestionRange.start >= boundary.start && suggestionRange.end <= boundary.end) {
+        const sentenceText = text.slice(boundary.start, boundary.end).trim();
+
+        console.log('✅ SENTENCE DEBUG: Found matching sentence', {
+          boundary,
+          sentenceText,
+          sentenceLength: sentenceText.length
+        });
+
         return {
-          text: text.slice(boundary.start, boundary.end).trim(),
+          text: sentenceText,
           range: boundary
         };
       }
     }
+
+    console.warn('⚠️ SENTENCE DEBUG: No containing sentence found', {
+      suggestionRange,
+      availableBoundaries: sentenceBoundaries
+    });
+
     return null;
   }
 
@@ -745,6 +767,311 @@ export class HybridGrammarService {
       console.error('❌ REFINE DEBUG: Refinement failed:', error);
       return null;
     }
+  }
+
+  /**
+   * Context-aware spelling refinement using the existing checkGrammar Cloud Function
+   */
+  async refineSpellingSuggestion(
+    suggestion: ClientSuggestion,
+    context: string
+  ): Promise<ClientSuggestion | null> {
+    if (suggestion.type !== 'spelling') {
+      console.warn('🚫 SPELLING REFINE DEBUG: Not a spelling suggestion', {
+        type: suggestion.type
+      });
+      return null;
+    }
+
+    // Validate input parameters
+    if (!context || typeof context !== 'string' || context.trim().length === 0) {
+      console.error('❌ SPELLING REFINE DEBUG: Invalid context parameter', {
+        context,
+        type: typeof context,
+        length: context?.length
+      });
+      return null;
+    }
+
+    if (!suggestion.flaggedText || suggestion.flaggedText.trim().length === 0) {
+      console.error('❌ SPELLING REFINE DEBUG: Invalid flagged text', {
+        flaggedText: suggestion.flaggedText,
+        suggestionId: suggestion.id
+      });
+      return null;
+    }
+
+    console.log('🔤 SPELLING REFINE DEBUG: Starting context-aware spelling refinement', {
+      suggestionId: suggestion.id,
+      flaggedWord: suggestion.flaggedText,
+      currentProposed: suggestion.replacement,
+      suggestionRange: suggestion.range,
+      contextLength: context.length,
+      contextPreview: context.slice(0, 100) + (context.length > 100 ? '...' : '')
+    });
+
+    try {
+      // Extract the sentence containing the spelling error
+      const sentenceBoundaries = this.findSentenceBoundaries(context);
+      console.log('📏 SPELLING REFINE DEBUG: Sentence boundaries found', {
+        boundariesCount: sentenceBoundaries.length,
+        firstFewBoundaries: sentenceBoundaries.slice(0, 3)
+      });
+
+      const containingSentence = this.findContainingSentence(
+        suggestion.range,
+        sentenceBoundaries,
+        context
+      );
+
+      if (!containingSentence || !containingSentence.text || containingSentence.text.trim().length === 0) {
+        console.warn('⚠️ SPELLING REFINE DEBUG: Could not find containing sentence, using full context as fallback', {
+          containingSentence,
+          hasText: !!containingSentence?.text,
+          textLength: containingSentence?.text?.length,
+          contextLength: context.length
+        });
+
+        // Fallback: use the full context if it's not too long (under 500 chars)
+        if (context && context.trim().length > 0 && context.length < 500) {
+          console.log('🔄 SPELLING REFINE DEBUG: Using full context as fallback');
+          const correctedSuggestions = await this.callSpellingCorrectionFunction(context.trim());
+
+          // Find the best spelling suggestion for our flagged word
+          const bestCorrection = this.findBestSpellingCorrection(
+            suggestion.flaggedText || '',
+            correctedSuggestions
+          );
+
+          if (!bestCorrection || bestCorrection === suggestion.replacement) {
+            console.warn('⚠️ SPELLING REFINE DEBUG: No improvement from fallback approach');
+            return null;
+          }
+
+          console.log('✨ SPELLING REFINE DEBUG: Successfully refined spelling suggestion via fallback', {
+            original: suggestion.flaggedText,
+            oldProposed: suggestion.replacement,
+            newProposed: bestCorrection
+          });
+
+          // Create a new suggestion with the context-aware correction
+          return {
+            ...suggestion,
+            id: `refined_spelling_${suggestion.id}_${Date.now()}`,
+            message: `Unknown word. Did you mean "${bestCorrection}"?`,
+            replacement: bestCorrection,
+            confidence: 90,
+            canRegenerate: true,
+            regenerateId: `refined_spelling_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          };
+        }
+
+        return null;
+      }
+
+      console.log('🎯 SPELLING REFINE DEBUG: Found containing sentence', {
+        sentence: containingSentence.text,
+        sentenceLength: containingSentence.text.length,
+        range: containingSentence.range,
+        flaggedWord: suggestion.flaggedText
+      });
+
+      // Call the checkGrammar Cloud Function for context-aware spelling correction
+      const correctedSuggestions = await this.callSpellingCorrectionFunction(containingSentence.text);
+
+      console.log('🔍 SPELLING REFINE DEBUG: Cloud Function suggestions analysis', {
+        suggestionsCount: correctedSuggestions.length,
+        suggestions: correctedSuggestions,
+        flaggedWord: suggestion.flaggedText,
+        currentReplacement: suggestion.replacement
+      });
+
+      // Find the best spelling suggestion for our flagged word
+      const bestCorrection = this.findBestSpellingCorrection(
+        suggestion.flaggedText || '',
+        correctedSuggestions
+      );
+
+      console.log('🎯 SPELLING REFINE DEBUG: Best correction analysis', {
+        flaggedWord: suggestion.flaggedText,
+        currentReplacement: suggestion.replacement,
+        bestCorrection,
+        isImprovement: bestCorrection && bestCorrection !== suggestion.replacement
+      });
+
+      if (!bestCorrection || bestCorrection === suggestion.replacement) {
+        console.warn('⚠️ SPELLING REFINE DEBUG: No improvement from Cloud Function', {
+          bestCorrection,
+          currentReplacement: suggestion.replacement,
+          isEqual: bestCorrection === suggestion.replacement
+        });
+        return null;
+      }
+
+      console.log('✨ SPELLING REFINE DEBUG: Successfully refined spelling suggestion', {
+        original: suggestion.flaggedText,
+        oldProposed: suggestion.replacement,
+        newProposed: bestCorrection
+      });
+
+      // Create a new suggestion with the context-aware correction
+      return {
+        ...suggestion,
+        id: `refined_spelling_${suggestion.id}_${Date.now()}`,
+        message: `Unknown word. Did you mean "${bestCorrection}"?`,
+        replacement: bestCorrection,
+        confidence: 90,
+        canRegenerate: true,
+        regenerateId: `refined_spelling_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
+
+    } catch (error) {
+      console.error('❌ SPELLING REFINE DEBUG: Spelling refinement failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Call the checkGrammar Cloud Function for spelling-only corrections
+   */
+  private async callSpellingCorrectionFunction(sentence: string): Promise<ClientSuggestion[]> {
+    try {
+      // Validate that sentence is not empty or undefined
+      if (!sentence || typeof sentence !== 'string' || sentence.trim().length === 0) {
+        console.error('❌ SPELLING CLOUD DEBUG: Invalid sentence parameter', {
+          sentence,
+          type: typeof sentence,
+          length: sentence?.length
+        });
+        return [];
+      }
+
+      // Use fetch directly since checkGrammar is an onRequest function, not onCall
+      const auth = await import('firebase/auth');
+      const { getAuth } = auth;
+      const user = getAuth().currentUser;
+
+      if (!user) {
+        console.error('❌ SPELLING CLOUD DEBUG: User not authenticated');
+        return [];
+      }
+
+      // Get the auth token
+      const token = await user.getIdToken();
+
+      const payload = {
+        text: sentence.trim(),
+        includeSpelling: true,
+        includeGrammar: false,
+        includeStyle: false,
+        enhancePassiveVoice: false
+      };
+
+      console.log('🌐 SPELLING CLOUD DEBUG: Calling checkGrammar for spelling correction', {
+        sentence,
+        sentenceLength: sentence.length,
+        sentenceType: typeof sentence,
+        trimmedText: sentence.trim(),
+        trimmedLength: sentence.trim().length,
+        payload: JSON.stringify(payload)
+      });
+
+            console.log('🚀 SPELLING CLOUD DEBUG: About to call Firebase function with payload:', payload);
+      console.log('🚀 SPELLING CLOUD DEBUG: Payload stringified:', JSON.stringify(payload));
+      console.log('🚀 SPELLING CLOUD DEBUG: Payload.text type:', typeof payload.text);
+      console.log('🚀 SPELLING CLOUD DEBUG: Payload.text value:', payload.text);
+
+      // Make HTTP request to checkGrammar endpoint
+      const response = await fetch('https://us-central1-wordwise-4234.cloudfunctions.net/checkGrammar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        console.error('❌ SPELLING CLOUD DEBUG: HTTP request failed', {
+          status: response.status,
+          statusText: response.statusText
+        });
+        return [];
+      }
+
+      const result = await response.json();
+
+      console.log('📨 SPELLING CLOUD DEBUG: Received response from checkGrammar', {
+        success: result.success,
+        suggestionsCount: result.data?.suggestions?.length || 0,
+        allSuggestions: result.data?.suggestions
+      });
+
+      if (result.success && result.data?.suggestions) {
+        // Convert Cloud Function suggestions to ClientSuggestion format
+        return result.data.suggestions
+          .filter((s: any) => s.type === 'spelling')
+          .map((s: any) => ({
+            id: nanoid(),
+            rule: 'spelling',
+            message: s.explanation || 'Spelling correction',
+            severity: 'error' as const,
+            range: {
+              start: s.range?.start || 0,
+              end: s.range?.end || 0
+            },
+            replacement: s.proposed || '',
+            type: 'spelling' as const,
+            confidence: Math.round((s.confidence || 0.9) * 100),
+            flaggedText: s.original || '',
+            canRegenerate: true
+          }));
+      }
+
+      return [];
+
+    } catch (error) {
+      console.error('❌ SPELLING CLOUD DEBUG: Error calling checkGrammar for spelling:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Find the best spelling correction from Cloud Function suggestions
+   */
+  private findBestSpellingCorrection(
+    flaggedWord: string,
+    suggestions: ClientSuggestion[]
+  ): string | null {
+    if (!suggestions || suggestions.length === 0) {
+      return null;
+    }
+
+    // Find suggestions that match our flagged word
+    const matchingSuggestions = suggestions.filter(s =>
+      s.flaggedText &&
+      s.flaggedText.toLowerCase().trim() === flaggedWord.toLowerCase().trim()
+    );
+
+    if (matchingSuggestions.length > 0) {
+      // Return the first (best) match
+      return matchingSuggestions[0].replacement || null;
+    }
+
+    // If no exact match, look for partial matches or similar words
+    const similarSuggestions = suggestions.filter(s =>
+      s.flaggedText && (
+        s.flaggedText.toLowerCase().includes(flaggedWord.toLowerCase()) ||
+        flaggedWord.toLowerCase().includes(s.flaggedText.toLowerCase())
+      )
+    );
+
+    if (similarSuggestions.length > 0) {
+      return similarSuggestions[0].replacement || null;
+    }
+
+    // Fall back to the first spelling suggestion
+    return suggestions[0].replacement || null;
   }
 
   async checkGrammar(

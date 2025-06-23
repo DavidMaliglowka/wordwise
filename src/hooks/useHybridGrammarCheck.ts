@@ -34,7 +34,8 @@ const DEFAULT_OPTIONS: Required<GrammarCheckOptions> = {
   includeGrammar: true,
   includeStyle: true, // Enable style by default for hybrid
   enableCache: true,
-  enhancePassiveVoice: false // Default to false for performance
+  enhancePassiveVoice: false, // Default to false for performance
+  enhanceSpelling: true // Enable context-aware spelling by default
 };
 
 // Helper to map client suggestion types to grammar types
@@ -83,6 +84,20 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     return clientSuggestions.map(suggestion => {
       const isPassiveVoice = suggestion.type === 'passive' ||
                             (suggestion.type === 'style' && suggestion.message?.toLowerCase().includes('passive'));
+      const isSpelling = suggestion.type === 'spelling';
+
+      // Clean up spelling explanations to be more user-friendly
+      let cleanExplanation = suggestion.message;
+      if (isSpelling) {
+        // Hide the long "expected for example..." descriptions for spelling
+        if (cleanExplanation.includes('expected for example')) {
+          const word = suggestion.flaggedText || suggestion.original;
+          const replacement = suggestion.replacement || '';
+          cleanExplanation = replacement
+            ? `Unknown word. Did you mean "${replacement}"?`
+            : `Unknown word "${word}".`;
+        }
+      }
 
       return {
         id: suggestion.id,
@@ -94,15 +109,15 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
         category: mapClientTypeToCategory(suggestion.type),
         original: suggestion.flaggedText || '',
         proposed: suggestion.replacement || '',
-        explanation: suggestion.message,
+        explanation: cleanExplanation,
         confidence: suggestion.confidence / 100, // Convert percentage to decimal
         severity: suggestion.severity === 'error' ? 'high' : suggestion.severity === 'warning' ? 'medium' : 'low',
         isVisible: true,
         isHovered: false,
         isDismissed: false,
-        // Add regeneration support for passive voice suggestions
-        canRegenerate: isPassiveVoice,
-        regenerateId: isPassiveVoice ? `regen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined
+        // Add regeneration support for passive voice and spelling suggestions
+        canRegenerate: isPassiveVoice || isSpelling,
+        regenerateId: (isPassiveVoice || isSpelling) ? `regen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined
       };
     });
   }, []);
@@ -232,12 +247,115 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     }
   }, [suggestions]);
 
-    // New: GPT-4o refinement for specific suggestions (using hybrid service for better results)
+    // Track which suggestions we already attempted to auto-refine
+  // so we don't call GPT repeatedly on the same one.
+  const autoRefinedIds = useRef<Set<string>>(new Set());
+
+  // New: Smart spelling refinement using context-aware GPT suggestions
+  const regenerateSpellingSuggestion = useCallback(async (suggestionId: string) => {
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion || suggestion.type !== 'spelling') {
+      console.error('❌ SPELLING REFINE DEBUG: Invalid suggestion for spelling refinement', {
+        suggestionId,
+        suggestionType: suggestion?.type,
+        expectedType: 'spelling'
+      });
+      return;
+    }
+
+    console.log('🔤 SPELLING REFINE DEBUG: Starting context-aware spelling refinement', {
+      suggestionId,
+      flaggedWord: suggestion.original,
+      currentProposed: suggestion.proposed
+    });
+
+    // Check if user is authenticated for GPT spelling refinement
+    if (!GrammarService.isAuthenticated()) {
+      console.error('❌ SPELLING REFINE DEBUG: User not authenticated');
+      setError({
+        message: 'Please sign in to use AI spelling refinement',
+        type: 'auth'
+      });
+      return;
+    }
+
+    setIsRefining(true);
+
+    try {
+      console.log('🌐 SPELLING REFINE DEBUG: Calling spelling refinement service...');
+
+      // Use hybrid service for context-aware spelling correction
+      const refinedSuggestion = await hybridGrammarService.refineSpellingSuggestion(
+        {
+          id: suggestion.id,
+          rule: 'spelling',
+          message: suggestion.explanation,
+          severity: 'error' as const,
+          range: suggestion.range,
+          replacement: suggestion.proposed,
+          type: 'spelling',
+          confidence: Math.round((suggestion.confidence || 0.5) * 100),
+          flaggedText: suggestion.original,
+          canRegenerate: true,
+          regenerateId: suggestion.id
+        },
+        lastCheckedText
+      );
+
+      if (refinedSuggestion) {
+        console.log('✨ SPELLING REFINE DEBUG: Successfully refined spelling suggestion', {
+          originalWord: suggestion.original,
+          originalProposed: suggestion.proposed,
+          refinedProposed: refinedSuggestion.replacement,
+          confidence: refinedSuggestion.confidence
+        });
+
+        // Convert the refined suggestion back to EditorSuggestion
+        const refinedEditorSuggestion = convertToEditorSuggestions([refinedSuggestion])[0];
+
+        if (refinedEditorSuggestion) {
+          // Replace the original suggestion with the refined one
+          setSuggestions(prev => [
+            ...prev.filter(s => s.id !== suggestionId),
+            {
+              ...refinedEditorSuggestion,
+              canRegenerate: true,
+              regenerateId: `refined_spelling_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            }
+          ]);
+
+          setStats(prev => ({
+            ...prev,
+            refinedSuggestions: prev.refinedSuggestions + 1
+          }));
+
+          console.log('✅ SPELLING REFINE DEBUG: Successfully replaced spelling suggestion with context-aware version');
+        }
+      } else {
+        console.log('⚠️ SPELLING REFINE DEBUG: No context improvement available, keeping original');
+      }
+    } catch (error: any) {
+      console.error('❌ Spelling refinement error:', error);
+      setError({
+        message: `Failed to refine spelling: ${error.message}`,
+        type: 'api'
+      });
+    } finally {
+      setIsRefining(false);
+    }
+  }, [suggestions, lastCheckedText, convertToEditorSuggestions]);
+
+  // Update the refineSuggestion method to handle spelling
   const refineSuggestion = useCallback(async (suggestionId: string) => {
     const suggestion = suggestions.find(s => s.id === suggestionId);
     if (!suggestion) {
       console.error('❌ REFINE DEBUG: Suggestion not found for ID:', suggestionId);
       return;
+    }
+
+    // Route to appropriate refinement method based on type
+    if (suggestion.type === 'spelling') {
+      return regenerateSpellingSuggestion(suggestionId);
     }
 
     console.log('🔍 REFINE DEBUG: Starting refinement process', {
@@ -295,7 +413,7 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
         const editorRefinedSuggestions = convertToEditorSuggestions(refinedSuggestions)
           .map(s => ({
             ...s,
-            canRegenerate: s.type === 'style' || s.type === 'passive',
+            canRegenerate: s.type === 'style' || s.type === 'passive' || s.type === 'spelling',
             regenerateId: `refined_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           }));
 
@@ -322,16 +440,26 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     } finally {
       setIsRefining(false);
     }
-  }, [suggestions, lastCheckedText, convertToEditorSuggestions]);
+  }, [suggestions, lastCheckedText, convertToEditorSuggestions, regenerateSpellingSuggestion]);
 
-  // New: Regenerate passive voice suggestions specifically using lightweight refinement
+  // Update regenerateSuggestion to also handle spelling
   const regenerateSuggestion = useCallback(async (suggestionId: string) => {
     const suggestion = suggestions.find(s => s.id === suggestionId);
-    if (!suggestion || (suggestion.type !== 'style' && suggestion.type !== 'passive')) {
+    if (!suggestion) {
+      console.error('❌ REGENERATE DEBUG: Suggestion not found');
+      return;
+    }
+
+    // Route to appropriate regeneration method
+    if (suggestion.type === 'spelling') {
+      return regenerateSpellingSuggestion(suggestionId);
+    }
+
+    if (suggestion.type !== 'style' && suggestion.type !== 'passive') {
       console.error('❌ REGENERATE DEBUG: Invalid suggestion for regeneration', {
         suggestionId,
         suggestionType: suggestion?.type,
-        availableTypes: ['style', 'passive']
+        availableTypes: ['style', 'passive', 'spelling']
       });
       return;
     }
@@ -420,7 +548,7 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     } finally {
       setIsRefining(false);
     }
-  }, [suggestions, lastCheckedText, convertToEditorSuggestions]);
+  }, [suggestions, lastCheckedText, convertToEditorSuggestions, regenerateSpellingSuggestion]);
 
   const retryLastCheck = useCallback(() => {
     if (lastCheckedText) {
@@ -437,30 +565,46 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     };
   }, []);
 
-  // Track which suggestions we already attempted to auto-refine
-  // so we don't call GPT repeatedly on the same one.
-  const autoRefinedIds = useRef<Set<string>>(new Set());
-
+  // Auto-refine logic for spelling and passive voice suggestions
   useEffect(() => {
     // Only attempt when we are not already refining globally
     if (isRefining) return;
 
     suggestions.forEach((s) => {
       const needsRefine =
-        (s.type === 'style' || s.type === 'passive') &&
+        // Passive voice suggestions that need refinement
+        ((s.type === 'style' || s.type === 'passive') &&
         // If proposed text is empty or identical to original, we want a rewrite
-        (!s.proposed || s.proposed.trim() === '' || s.proposed.trim() === s.original.trim());
+        (!s.proposed || s.proposed.trim() === '' || s.proposed.trim() === s.original.trim())) ||
+        // Spelling suggestions that need context-aware refinement
+        (s.type === 'spelling' &&
+        // If confidence is low or no proposed replacement
+        (s.confidence < 0.8 || !s.proposed || s.proposed.trim() === ''));
 
       if (needsRefine && !autoRefinedIds.current.has(s.id)) {
         autoRefinedIds.current.add(s.id);
 
         // Fire and forget – no await so UI stays responsive
-        regenerateSuggestion(s.id).catch(() => {
-          /* swallow – user can still click regenerate manually */
-        });
+        setTimeout(() => {
+          if (s.type === 'spelling') {
+            console.log('🤖 AUTO-REFINE DEBUG: Starting automatic spelling refinement', {
+              suggestionId: s.id,
+              flaggedWord: s.original,
+              currentProposed: s.proposed,
+              confidence: s.confidence
+            });
+            regenerateSpellingSuggestion(s.id).catch(() => {
+              /* swallow – user can still click regenerate manually */
+            });
+          } else {
+            regenerateSuggestion(s.id).catch(() => {
+              /* swallow – user can still click regenerate manually */
+            });
+          }
+        }, 1000); // 1 second delay for auto-refine
       }
     });
-  }, [suggestions, regenerateSuggestion, isRefining]);
+  }, [suggestions, regenerateSuggestion, regenerateSpellingSuggestion, isRefining]);
 
   return {
     suggestions: suggestions.filter(s => !s.isDismissed),

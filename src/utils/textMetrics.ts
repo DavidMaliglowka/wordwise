@@ -44,8 +44,8 @@ export function calculateTextMetrics(text: string): TextMetrics {
   // Flesch-Kincaid Grade Level (rounded down to nearest integer)
   // Formula: 0.39 × (words/sentences) + 11.8 × (syllables/words) - 15.59
   const fleschKincaidGrade = wordCount > 0 && sentenceCount > 0
-    ? Math.floor(0.39 * (wordCount / sentenceCount) + 11.8 * (totalSyllables / wordCount) - 15.59)
-    : 0;
+    ? Math.max(2, Math.floor(0.39 * (wordCount / sentenceCount) + 11.8 * (totalSyllables / wordCount) - 15.59))
+    : 2;
 
   // Reading time (275 words per minute for silent reading)
   const readingTimeTotal = wordCount / 275;
