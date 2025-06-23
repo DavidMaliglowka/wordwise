@@ -10,16 +10,25 @@ const PersonalDictionaryManager: React.FC<PersonalDictionaryManagerProps> = ({ c
   const [stats, setStats] = useState<PersonalDictionaryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<PersonalDictionaryStats['syncStatus']>('offline');
+  const [syncMessage, setSyncMessage] = useState<string>('');
 
   // Add word form state
   const [newWord, setNewWord] = useState('');
   const [newWordCategory, setNewWordCategory] = useState<PersonalDictionaryEntry['category']>('custom');
   const [newWordNotes, setNewWordNotes] = useState('');
   const [adding, setAdding] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // Filter state
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [periodicSyncEnabled, setPeriodicSyncEnabled] = useState(false);
+
+  // Update sync status
+  const updateSyncStatus = () => {
+    setSyncStatus(personalDictionary.getSyncStatus());
+  };
 
   // Load dictionary data
   const loadData = async () => {
@@ -34,6 +43,7 @@ const PersonalDictionaryManager: React.FC<PersonalDictionaryManagerProps> = ({ c
 
       setEntries(allEntries);
       setStats(dictionaryStats);
+      updateSyncStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load personal dictionary');
     } finally {
@@ -44,6 +54,63 @@ const PersonalDictionaryManager: React.FC<PersonalDictionaryManagerProps> = ({ c
   // Initialize on mount
   useEffect(() => {
     loadData();
+
+    // Update sync status periodically
+    const interval = setInterval(updateSyncStatus, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Manual sync with server
+  const handleManualSync = async () => {
+    if (!personalDictionary.isUserAuthenticated()) {
+      setSyncMessage('Please log in to sync with server');
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      setSyncMessage('');
+      setError(null);
+
+      const result = await personalDictionary.manualSync();
+
+      if (result.success) {
+        setSyncMessage(`✅ ${result.message} (${result.wordsCount} words)`);
+        await loadData(); // Refresh the UI
+      } else {
+        setSyncMessage(`❌ ${result.message}`);
+      }
+    } catch (err) {
+      setSyncMessage(`❌ Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setSyncing(false);
+
+      // Clear sync message after 3 seconds
+      setTimeout(() => setSyncMessage(''), 3000);
+    }
+  };
+
+  // Toggle periodic sync
+  const handlePeriodicSyncToggle = (enabled: boolean) => {
+    setPeriodicSyncEnabled(enabled);
+
+    if (enabled) {
+      personalDictionary.startPeriodicSync(5); // Every 5 minutes
+      setSyncMessage('🔄 Periodic sync enabled (every 5 minutes)');
+    } else {
+      personalDictionary.stopPeriodicSync();
+      setSyncMessage('⏹️ Periodic sync disabled');
+    }
+
+    // Clear message after 2 seconds
+    setTimeout(() => setSyncMessage(''), 2000);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      personalDictionary.stopPeriodicSync();
+    };
   }, []);
 
   // Add a new word
@@ -102,6 +169,24 @@ const PersonalDictionaryManager: React.FC<PersonalDictionaryManagerProps> = ({ c
     }
   };
 
+  // Get sync status display
+  const getSyncStatusDisplay = () => {
+    const isAuthenticated = personalDictionary.isUserAuthenticated();
+
+    if (!isAuthenticated) {
+      return { color: 'text-gray-500', icon: '🔒', text: 'Offline Only' };
+    }
+
+    switch (syncStatus) {
+      case 'synced':
+        return { color: 'text-green-600', icon: '✅', text: 'Synced' };
+      case 'pending':
+        return { color: 'text-yellow-600', icon: '🔄', text: 'Syncing...' };
+      default:
+        return { color: 'text-red-600', icon: '❌', text: 'Offline' };
+    }
+  };
+
   // Filter entries based on category and search
   const filteredEntries = entries.filter(entry => {
     const matchesCategory = filterCategory === 'all' || entry.category === filterCategory;
@@ -112,6 +197,7 @@ const PersonalDictionaryManager: React.FC<PersonalDictionaryManagerProps> = ({ c
 
   // Get unique categories
   const categories = Array.from(new Set(entries.map(e => e.category || 'custom')));
+  const syncDisplay = getSyncStatusDisplay();
 
   if (loading) {
     return (
@@ -140,9 +226,16 @@ const PersonalDictionaryManager: React.FC<PersonalDictionaryManagerProps> = ({ c
         </div>
       )}
 
+      {/* Sync Message */}
+      {syncMessage && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-blue-800 text-sm">{syncMessage}</p>
+        </div>
+      )}
+
       {/* Statistics */}
       {stats && (
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-blue-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold text-blue-900">Total Words</h3>
             <p className="text-2xl font-bold text-blue-700">{stats.totalWords}</p>
@@ -154,6 +247,41 @@ const PersonalDictionaryManager: React.FC<PersonalDictionaryManagerProps> = ({ c
           <div className="bg-purple-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold text-purple-900">Cache Size</h3>
             <p className="text-2xl font-bold text-purple-700">{personalDictionary.getCacheSize()}</p>
+          </div>
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="text-lg font-semibold text-gray-900">Sync Status</h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-medium ${syncDisplay.color}`}>
+                  {syncDisplay.icon} {syncDisplay.text}
+                </p>
+                {personalDictionary.isUserAuthenticated() && (
+                  <button
+                    onClick={handleManualSync}
+                    disabled={syncing || syncStatus === 'pending'}
+                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {syncing ? '⏳' : '🔄'}
+                  </button>
+                )}
+              </div>
+
+              {/* Periodic Sync Toggle */}
+              {personalDictionary.isUserAuthenticated() && (
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                  <span className="text-xs text-gray-600">Auto-sync (5min)</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={periodicSyncEnabled}
+                      onChange={(e) => handlePeriodicSyncToggle(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

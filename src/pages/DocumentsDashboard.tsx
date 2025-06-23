@@ -13,7 +13,7 @@ import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import { DocumentService } from '../services/documents';
-import { Document } from '../types/firestore';
+import { Document, timestampToDate } from '../types/firestore';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import { AdminFeature } from '../components/AdminRoute';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
@@ -51,7 +51,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
 
   // Format date to match the design (e.g., "5 Jun")
   const formatDate = (timestamp: any) => {
-    const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+    const date = timestampToDate(timestamp);
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
@@ -640,7 +640,7 @@ const DocumentsDashboard: React.FC = () => {
                 ) : (
                   <>
                     <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
-                    Upload (.docx/.txt)
+                    Upload file
                   </>
                 )}
               </button>

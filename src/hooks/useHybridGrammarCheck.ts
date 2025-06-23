@@ -22,6 +22,7 @@ interface UseHybridGrammarCheckResult {
   dismissSuggestion: (suggestionId: string) => void;
   applySuggestion: (suggestionId: string, currentText: string) => { newText: string; appliedSuggestion: GrammarSuggestion } | null;
   refineSuggestion: (suggestionId: string) => Promise<void>; // New: GPT-4o refinement
+  regenerateSuggestion: (suggestionId: string) => Promise<void>; // New: Passive voice regeneration
   retryLastCheck: () => void;
   stats: { clientSuggestions: number; refinedSuggestions: number; totalProcessingTime: number };
 }
@@ -32,7 +33,8 @@ const DEFAULT_OPTIONS: Required<GrammarCheckOptions> = {
   includeSpelling: true,
   includeGrammar: true,
   includeStyle: true, // Enable style by default for hybrid
-  enableCache: true
+  enableCache: true,
+  enhancePassiveVoice: false // Default to false for performance
 };
 
 // Helper to map client suggestion types to grammar types
@@ -114,7 +116,12 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
 
     try {
       // Use hybrid grammar service for instant client-side analysis
-      const result = await hybridGrammarService.checkGrammar(text);
+      const result = await hybridGrammarService.checkGrammar(text, {
+        includeStyle: config.includeStyle,
+        priority: 'balanced',
+        userTier: 'premium', // All users get enhanced features now
+        enhancePassiveVoice: config.enhancePassiveVoice
+      });
 
       // Check if this is still the current request
       if (requestId === currentRequestRef.current) {
@@ -288,6 +295,65 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     }
   }, [suggestions, lastCheckedText]);
 
+  // New: Regenerate passive voice suggestions specifically
+  const regenerateSuggestion = useCallback(async (suggestionId: string) => {
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion || suggestion.type !== 'style') return;
+
+    // Check if user is authenticated for GPT-4o regeneration
+    if (!GrammarService.isAuthenticated()) {
+      setError({
+        message: 'Please sign in to use AI regeneration',
+        type: 'auth'
+      });
+      return;
+    }
+
+    setIsRefining(true);
+
+    try {
+      // Call the hybrid grammar service with enhanced passive voice enabled
+      const result = await hybridGrammarService.checkGrammar(lastCheckedText, {
+        includeStyle: true,
+        priority: 'quality',
+        userTier: 'premium',
+        enhancePassiveVoice: true
+      });
+
+      // Find suggestions that match the regeneration request
+      const newSuggestions = result.suggestions.filter(s =>
+        s.type === 'passive' &&
+        s.range.start >= suggestion.range.start - 10 &&
+        s.range.end <= suggestion.range.end + 10
+      );
+
+      if (newSuggestions.length > 0) {
+        const editorSuggestions = convertToEditorSuggestions(newSuggestions)
+          .map(s => ({
+            ...s,
+            canRegenerate: true,
+            regenerateId: `regen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          }));
+
+        // Replace the original suggestion with regenerated ones
+        setSuggestions(prev => [
+          ...prev.filter(s => s.id !== suggestionId),
+          ...editorSuggestions
+        ]);
+
+        console.log(`🔄 Regenerated suggestion ${suggestionId} with ${newSuggestions.length} new options`);
+      }
+    } catch (error: any) {
+      setError({
+        message: `Failed to regenerate suggestion: ${error.message}`,
+        type: 'api'
+      });
+      console.error('❌ Suggestion regeneration error:', error);
+    } finally {
+      setIsRefining(false);
+    }
+  }, [suggestions, lastCheckedText, convertToEditorSuggestions]);
+
   const retryLastCheck = useCallback(() => {
     if (lastCheckedText) {
       performHybridGrammarCheck(lastCheckedText);
@@ -314,6 +380,7 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     dismissSuggestion,
     applySuggestion,
     refineSuggestion,
+    regenerateSuggestion,
     retryLastCheck,
     stats
   };

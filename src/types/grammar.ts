@@ -49,6 +49,9 @@ export interface EditorSuggestion extends GrammarSuggestion {
   isHovered: boolean; // Whether hover card is active
   isDismissed: boolean; // Whether user dismissed this suggestion
   category: GrammarCategory; // Required for UI - will be auto-assigned if not provided
+  // Enhanced passive voice functionality
+  canRegenerate?: boolean; // Whether this suggestion supports regeneration (mainly for passive voice)
+  regenerateId?: string; // Unique ID for regeneration requests
 }
 
 // Categorized suggestions for UI display
@@ -66,6 +69,7 @@ export interface GrammarCheckOptions {
   includeGrammar?: boolean;
   includeStyle?: boolean;
   enableCache?: boolean; // Client-side caching
+  enhancePassiveVoice?: boolean; // Enhanced passive voice detection with GPT-4o
 }
 
 // Error types

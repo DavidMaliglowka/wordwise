@@ -11,6 +11,7 @@ import { GrammarService } from '../services/grammar';
 import { ArrowLeft, Save, Clock, Zap, Brain, ChevronRight, ChevronLeft, ChevronDown } from 'lucide-react';
 import { DocumentLengthDropdown, EstimatedTimeDropdown, ReadabilityTooltip } from '../components/MetricsComponents';
 import { calculateTextMetrics } from '../utils/textMetrics';
+import { personalDictionary } from '../services/personal-dictionary';
 
 const DocumentEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +50,7 @@ const DocumentEditor: React.FC = () => {
     dismissSuggestion,
     applySuggestion,
     refineSuggestion,
+    regenerateSuggestion,
     retryLastCheck,
     stats
   } = useHybridGrammarCheck({
@@ -146,6 +148,27 @@ const DocumentEditor: React.FC = () => {
     }
   }, [refineSuggestion]);
 
+  // Handle regenerating a passive voice suggestion
+  const handleRegenerateSuggestion = useCallback(async (suggestionId: string) => {
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion) {
+      console.error('❌ REGENERATE DEBUG: Suggestion not found:', suggestionId);
+      return;
+    }
+
+    console.log('🔄 REGENERATE DEBUG: Starting passive voice regeneration', {
+      suggestionId: suggestion.id,
+      original: suggestion.original
+    });
+
+    try {
+      await regenerateSuggestion(suggestion.id);
+      console.log('✅ REGENERATE DEBUG: Regeneration completed successfully');
+    } catch (error) {
+      console.error('❌ REGENERATE DEBUG: Regeneration failed:', error);
+    }
+  }, [regenerateSuggestion, suggestions]);
+
   // Handle dismissing a suggestion
   const handleDismissSuggestion = useCallback((suggestionId: string) => {
     dismissSuggestion(suggestionId);
@@ -169,6 +192,29 @@ const DocumentEditor: React.FC = () => {
   const handleClearAllSuggestions = useCallback(() => {
     clearSuggestions();
   }, [clearSuggestions]);
+
+  // Handle adding word to personal dictionary
+  const handleAddToDictionary = useCallback(async (word: string) => {
+    if (!user) {
+      console.warn('User not authenticated, cannot add to dictionary');
+      return;
+    }
+
+    try {
+      await personalDictionary.addWord(word);
+      console.log('📚 DICTIONARY DEBUG: Added word to dictionary:', word);
+
+      // Clear grammar suggestions to remove the now-allowed word
+      clearSuggestions();
+
+      // Re-check the text to get updated suggestions
+      if (editorState.content.trim().length > 0) {
+        checkGrammar(editorState.content);
+      }
+    } catch (error) {
+      console.error('Failed to add word to dictionary:', error);
+    }
+  }, [user, clearSuggestions, checkGrammar, editorState.content]);
 
   // Handle mark application start
   const handleMarkApplicationStart = useCallback(() => {
@@ -621,6 +667,9 @@ const DocumentEditor: React.FC = () => {
                 onGrammarSuggestionClick={handleGrammarMarkClick}
                 onApplyGrammarSuggestion={handleApplySuggestion}
                 onDismissGrammarSuggestion={handleDismissSuggestion}
+                onRegenerateGrammarSuggestion={handleRegenerateSuggestion}
+                onAddToDictionary={handleAddToDictionary}
+                isRegenerating={isGrammarRefining}
                 onGrammarMarkApplicationStart={handleMarkApplicationStart}
                 onGrammarMarkApplicationEnd={handleMarkApplicationEnd}
               />
@@ -637,6 +686,7 @@ const DocumentEditor: React.FC = () => {
             onApplySuggestion={handleApplySuggestion}
             onDismissSuggestion={handleDismissSuggestion}
             onRefineSuggestion={handleRefineSuggestion}
+            onAddToDictionary={handleAddToDictionary}
             onClearAll={handleClearAllSuggestions}
           />
         </div>
@@ -710,6 +760,18 @@ const DocumentEditor: React.FC = () => {
                                 >
                                   Apply
                                 </button>
+                                {suggestion.type === 'spelling' && (
+                                  <button
+                                    onClick={() => {
+                                      handleAddToDictionary(suggestion.original);
+                                      setIsSidebarOpen(false);
+                                    }}
+                                    className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                    title="Add to dictionary"
+                                  >
+                                    📚
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => handleDismissSuggestion(suggestion.id)}
                                   className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"

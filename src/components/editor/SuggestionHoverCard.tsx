@@ -23,6 +23,12 @@ interface SuggestionHoverCardProps {
   onApplySuggestion?: (suggestion: EditorSuggestion) => void;
   /** Callback when user dismisses a suggestion */
   onDismissSuggestion?: (suggestionId: string) => void;
+  /** Callback when user wants to regenerate a passive voice suggestion */
+  onRegenerateSuggestion?: (suggestionId: string) => void;
+  /** Callback when user wants to add a word to personal dictionary */
+  onAddToDictionary?: (word: string) => void;
+  /** Whether regeneration is currently in progress */
+  isRegenerating?: boolean;
 }
 
 export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
@@ -30,6 +36,9 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
   getSuggestion,
   onApplySuggestion,
   onDismissSuggestion,
+  onRegenerateSuggestion,
+  onAddToDictionary,
+  isRegenerating = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentSuggestion, setCurrentSuggestion] = useState<EditorSuggestion | null>(null);
@@ -210,6 +219,8 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
         return '❓';
       case 'style':
         return '🎨';
+      case 'passive':
+        return '🔄';
       default:
         return '💡';
     }
@@ -225,6 +236,8 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
         return 'text-orange-700 bg-orange-50 border-orange-200';
       case 'style':
         return 'text-blue-700 bg-blue-50 border-blue-200';
+      case 'passive':
+        return 'text-purple-700 bg-purple-50 border-purple-200';
       default:
         return 'text-gray-700 bg-gray-50 border-gray-200';
     }
@@ -302,10 +315,57 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
                   setIsOpen(false);
                 }}
                 className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                disabled={isRegenerating}
               >
                 Apply
               </button>
             )}
+
+            {/* Add to Dictionary button for spelling suggestions */}
+            {currentSuggestion.type === 'spelling' && onAddToDictionary && (
+              <button
+                onClick={() => {
+                  console.log('📚 HOVER DEBUG: Add to Dictionary button clicked');
+                  onAddToDictionary(currentSuggestion.original);
+                  setIsOpen(false);
+                }}
+                className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1"
+                title="Add word to personal dictionary"
+              >
+                <div className="flex items-center gap-1">
+                  <span>📚</span>
+                  <span>Add to Dictionary</span>
+                </div>
+              </button>
+            )}
+
+            {/* Regenerate button for passive voice suggestions */}
+            {(currentSuggestion.type === 'style' || currentSuggestion.type === 'passive') &&
+             currentSuggestion.canRegenerate &&
+             onRegenerateSuggestion && (
+              <button
+                onClick={() => {
+                  console.log('🔄 HOVER DEBUG: Regenerate button clicked');
+                  onRegenerateSuggestion(currentSuggestion.id);
+                  // Keep the card open to show new suggestions
+                }}
+                className="px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isRegenerating}
+              >
+                {isRegenerating ? (
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Regenerating...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <span>🔄</span>
+                    <span>Regenerate</span>
+                  </div>
+                )}
+              </button>
+            )}
+
             {onDismissSuggestion && (
               <button
                 onClick={() => {
@@ -314,6 +374,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
                   setIsOpen(false);
                 }}
                 className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1"
+                disabled={isRegenerating}
               >
                 Dismiss
               </button>

@@ -91,6 +91,59 @@ async function verifyAuth(req: any): Promise<string> {
   }
 }
 
+/**
+ * Fetch user's personal dictionary from Firestore
+ */
+async function getUserPersonalDictionary(uid: string): Promise<string[]> {
+  try {
+    const userDoc = await db.collection('users').doc(uid).get();
+
+    if (!userDoc.exists) {
+      return [];
+    }
+
+    const userData = userDoc.data();
+    return userData?.dictionary || [];
+  } catch (error) {
+    logger.warn('Failed to fetch personal dictionary for user:', uid, error);
+    return []; // Return empty array if fetch fails - don't block grammar checking
+  }
+}
+
+/**
+ * Filter suggestions based on user's personal dictionary
+ */
+function filterSuggestionsWithPersonalDictionary(suggestions: any[], personalDictionary: string[]): any[] {
+  if (!personalDictionary || personalDictionary.length === 0) {
+    return suggestions;
+  }
+
+  // Create a Set for faster lookups
+  const dictionarySet = new Set(personalDictionary.map(word => word.toLowerCase()));
+
+  return suggestions.filter(suggestion => {
+    // Extract the flagged word from the suggestion
+    let flaggedWord = '';
+
+    if (suggestion.original) {
+      flaggedWord = suggestion.original.toLowerCase().trim();
+    } else if (suggestion.context) {
+      // If we have context, try to extract the flagged word
+      const contextMatch = suggestion.context.match(/\*\*(.*?)\*\*/);
+      if (contextMatch) {
+        flaggedWord = contextMatch[1].toLowerCase().trim();
+      }
+    }
+
+    if (flaggedWord && dictionarySet.has(flaggedWord)) {
+      logger.info(`Filtered suggestion for personal dictionary word: "${flaggedWord}"`);
+      return false; // Filter out this suggestion
+    }
+
+    return true; // Keep this suggestion
+  });
+}
+
 // Helper function to set CORS headers with restricted origins
 function setCorsHeaders(res: any, req?: any) {
   // Define allowed origins for different environments
@@ -519,20 +572,28 @@ export const checkGrammar = onRequest({
       enhancePassiveVoice
     });
 
+    // Fetch user's personal dictionary
+    const personalDictionary = await getUserPersonalDictionary(uid);
+
     // Check cache first
     const cachedResult = getCachedResult(cacheKey);
     if (cachedResult) {
+      // Apply personal dictionary filter to cached results
+      const filteredSuggestions = filterSuggestionsWithPersonalDictionary(cachedResult, personalDictionary);
+
       const response: GrammarCheckResponse = {
-        suggestions: cachedResult,
+        suggestions: filteredSuggestions,
         processedText: text,
         cached: true,
         processingTimeMs: Date.now() - startTime
       };
 
-      logger.info('Grammar check served from cache', {
+      logger.info('Grammar check served from cache with personal dictionary filter', {
         uid,
         textLength: text.length,
-        suggestionsCount: cachedResult.length,
+        originalSuggestions: cachedResult.length,
+        filteredSuggestions: filteredSuggestions.length,
+        personalDictionarySize: personalDictionary.length,
         cacheKey: cacheKey.substring(0, 16) + '...'
       });
 
@@ -561,8 +622,12 @@ export const checkGrammar = onRequest({
           }
         );
 
-        // Cache the result
+        // Cache the result (unfiltered, so cache is user-agnostic)
         setCachedResult(cacheKey, suggestions);
+
+        // Apply personal dictionary filter
+        const originalSuggestionsCount = suggestions.length;
+        suggestions = filterSuggestionsWithPersonalDictionary(suggestions, personalDictionary);
 
         // Send final result
         const response: GrammarCheckResponse = {
@@ -575,10 +640,12 @@ export const checkGrammar = onRequest({
         res.write(`data: ${JSON.stringify({ type: 'complete', data: response })}\n\n`);
         res.end();
 
-        logger.info('Streaming grammar check completed', {
+        logger.info('Streaming grammar check completed with personal dictionary filter', {
           uid,
           textLength: text.length,
-          suggestionsCount: suggestions.length,
+          originalSuggestions: originalSuggestionsCount,
+          filteredSuggestions: suggestions.length,
+          personalDictionarySize: personalDictionary.length,
           processingTimeMs: Date.now() - startTime
         });
 
@@ -593,15 +660,19 @@ export const checkGrammar = onRequest({
 
     // Handle regular (non-streaming) response
     try {
-      const suggestions = await checkGrammarWithOpenAI(text, {
+      let suggestions = await checkGrammarWithOpenAI(text, {
         includeSpelling,
         includeGrammar,
         includeStyle,
         enhancePassiveVoice
       });
 
-      // Cache the result
+      // Cache the result (unfiltered, so cache is user-agnostic)
       setCachedResult(cacheKey, suggestions);
+
+      // Apply personal dictionary filter
+      const originalSuggestionsCount = suggestions.length;
+      suggestions = filterSuggestionsWithPersonalDictionary(suggestions, personalDictionary);
 
       const response: GrammarCheckResponse = {
         suggestions,
@@ -610,10 +681,12 @@ export const checkGrammar = onRequest({
         processingTimeMs: Date.now() - startTime
       };
 
-      logger.info('Grammar check completed', {
+      logger.info('Grammar check completed with personal dictionary filter', {
         uid,
         textLength: text.length,
-        suggestionsCount: suggestions.length,
+        originalSuggestions: originalSuggestionsCount,
+        filteredSuggestions: suggestions.length,
+        personalDictionarySize: personalDictionary.length,
         processingTimeMs: Date.now() - startTime,
         cacheKey: cacheKey.substring(0, 16) + '...'
       });
@@ -687,17 +760,23 @@ export const enhancePassiveVoice = onRequest({
     const startTime = Date.now();
 
     try {
+      // Fetch user's personal dictionary
+      const personalDictionary = await getUserPersonalDictionary(uid);
+
       // Process each sentence for passive voice enhancement
       const enhancedSentences = [];
 
       for (const sentence of sentences) {
         // Use the existing checkGrammarWithOpenAI function with passive voice enhancement
-        const suggestions = await checkGrammarWithOpenAI(sentence, {
+        let suggestions = await checkGrammarWithOpenAI(sentence, {
           includeSpelling: false,
           includeGrammar: false,
           includeStyle: false,
           enhancePassiveVoice: true
         });
+
+        // Apply personal dictionary filter
+        suggestions = filterSuggestionsWithPersonalDictionary(suggestions, personalDictionary);
 
         // Find passive voice suggestions
         const passiveSuggestions = suggestions.filter(s => s.type === 'passive');
@@ -716,10 +795,11 @@ export const enhancePassiveVoice = onRequest({
         passiveSentencesFound: enhancedSentences.filter(s => s.hasPassiveVoice).length
       };
 
-      logger.info('Passive voice enhancement completed', {
+      logger.info('Passive voice enhancement completed with personal dictionary filter', {
         uid,
         totalSentences: sentences.length,
         passiveSentencesFound: response.passiveSentencesFound,
+        personalDictionarySize: personalDictionary.length,
         processingTimeMs: response.processingTimeMs
       });
 

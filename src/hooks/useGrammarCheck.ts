@@ -27,7 +27,8 @@ const DEFAULT_OPTIONS: Required<GrammarCheckOptions> = {
   includeSpelling: true,
   includeGrammar: true,
   includeStyle: false,
-  enableCache: true
+  enableCache: true,
+  enhancePassiveVoice: false,
 };
 
 export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): UseGrammarCheckResult {

@@ -46,6 +46,9 @@ interface LexicalEditorProps {
   onGrammarSuggestionClick?: (suggestion: EditorSuggestion) => void;
   onApplyGrammarSuggestion?: (suggestion: EditorSuggestion) => void;
   onDismissGrammarSuggestion?: (suggestionId: string) => void;
+  onRegenerateGrammarSuggestion?: (suggestionId: string) => void;
+  onAddToDictionary?: (word: string) => void;
+  isRegenerating?: boolean;
   onGrammarMarkApplicationStart?: () => void;
   onGrammarMarkApplicationEnd?: () => void;
 }
@@ -218,6 +221,9 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
   onGrammarSuggestionClick,
   onApplyGrammarSuggestion,
   onDismissGrammarSuggestion,
+  onRegenerateGrammarSuggestion,
+  onAddToDictionary,
+  isRegenerating = false,
   onGrammarMarkApplicationStart,
   onGrammarMarkApplicationEnd,
 }, ref) => {
@@ -318,6 +324,7 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
                     font-serif
                   `}
                   aria-placeholder={placeholder}
+                  spellCheck={false}
                   placeholder={
                     <div className="absolute top-6 sm:top-8 lg:top-12 left-6 sm:left-8 lg:left-12 text-gray-500 text-base sm:text-lg pointer-events-none select-none font-serif">
                       {placeholder}
@@ -364,6 +371,9 @@ const LexicalEditor = forwardRef<LexicalEditorRef, LexicalEditorProps>(({
           getSuggestion={getSuggestionById}
           onApplySuggestion={onApplyGrammarSuggestion}
           onDismissSuggestion={onDismissGrammarSuggestion}
+          onRegenerateSuggestion={onRegenerateGrammarSuggestion}
+          onAddToDictionary={onAddToDictionary}
+          isRegenerating={isRegenerating}
         />
       </LexicalComposer>
     </div>

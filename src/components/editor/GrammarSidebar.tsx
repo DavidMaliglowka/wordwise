@@ -9,6 +9,7 @@ interface GrammarSidebarProps {
   onApplySuggestion: (suggestion: EditorSuggestion) => void;
   onDismissSuggestion: (suggestionId: string) => void;
   onRefineSuggestion?: (suggestion: EditorSuggestion) => void;
+  onAddToDictionary?: (word: string) => void;
   onClearAll: () => void;
 }
 
@@ -58,6 +59,7 @@ const GrammarSidebar: React.FC<GrammarSidebarProps> = ({
   onApplySuggestion,
   onDismissSuggestion,
   onRefineSuggestion,
+  onAddToDictionary,
   onClearAll
 }) => {
   const [expandedCategories, setExpandedCategories] = useState<Record<GrammarCategory, boolean>>({
@@ -112,6 +114,15 @@ const GrammarSidebar: React.FC<GrammarSidebarProps> = ({
           >
             <Check className="w-3 h-3" />
           </button>
+          {suggestion.type === 'spelling' && onAddToDictionary && (
+            <button
+              onClick={() => onAddToDictionary(suggestion.original)}
+              className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+              title="Add word to personal dictionary"
+            >
+              <span className="text-xs">📚</span>
+            </button>
+          )}
           {onRefineSuggestion && (
             <button
               onClick={() => onRefineSuggestion(suggestion)}

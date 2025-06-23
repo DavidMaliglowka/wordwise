@@ -4,6 +4,7 @@ import { AuthProvider, useAuthContext } from '../contexts/AuthContext';
 import { AuthPage } from '../pages/AuthPage';
 import DocumentsDashboard from '../pages/DocumentsDashboard';
 import DocumentEditor from '../pages/DocumentEditor';
+import AccountPage from '../pages/AccountPage';
 import GrammarTestPage from '../pages/GrammarTestPage';
 import HybridGrammarTest from './test/HybridGrammarTest';
 import PerformanceMonitorTest from './test/PerformanceMonitorTest';
@@ -74,6 +75,14 @@ const AppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <DocumentEditor />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/account"
+          element={
+            <ProtectedRoute>
+              <AccountPage />
             </ProtectedRoute>
           }
         />

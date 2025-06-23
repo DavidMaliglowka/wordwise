@@ -1,6 +1,8 @@
 // Personal Dictionary Service - IndexedDB Implementation
 // Provides instant client-side storage for user-added terms
 
+import { auth } from '../lib/firebase';
+
 export interface PersonalDictionaryEntry {
   id: string;
   word: string;
@@ -17,6 +19,35 @@ export interface PersonalDictionaryStats {
   syncStatus: 'synced' | 'pending' | 'offline';
 }
 
+// Server-side API endpoints
+interface ServerDictionaryResponse {
+  success: boolean;
+  data: {
+    dictionary: string[];
+    totalWords: number;
+    lastUpdated: string | null;
+  };
+}
+
+interface ServerAddResponse {
+  success: boolean;
+  data: {
+    word: string;
+    category?: string;
+    notes?: string;
+    addedAt: string;
+  };
+}
+
+interface ServerRemoveResponse {
+  success: boolean;
+  message: string;
+  data: {
+    word: string;
+    removedAt: string;
+  };
+}
+
 class PersonalDictionaryService {
   private dbName = 'wordwise-personal-dictionary';
   private dbVersion = 1;
@@ -24,6 +55,10 @@ class PersonalDictionaryService {
   private db: IDBDatabase | null = null;
   private cache = new Set<string>(); // In-memory cache for fast lookups
   private isInitialized = false;
+  private syncInProgress = false;
+
+  // Cloud Functions base URLs
+  private readonly baseUrl = 'https://us-central1-wordwise-4234.cloudfunctions.net';
 
   // Initialize the IndexedDB database
   async initialize(): Promise<void> {
@@ -39,7 +74,13 @@ class PersonalDictionaryService {
       request.onsuccess = (event) => {
         this.db = (event.target as IDBOpenDBRequest).result;
         this.isInitialized = true;
-        this.loadCacheFromDB().then(() => resolve());
+        this.loadCacheFromDB().then(() => {
+          // Auto-sync on initialization if user is authenticated
+          if (auth.currentUser) {
+            this.syncFromServer().catch(console.warn);
+          }
+          resolve();
+        });
       };
 
       request.onupgradeneeded = (event) => {
@@ -57,6 +98,97 @@ class PersonalDictionaryService {
         }
       };
     });
+  }
+
+  // Get authentication token for API calls
+  private async getAuthToken(): Promise<string> {
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    return await user.getIdToken();
+  }
+
+  // Make authenticated request to Cloud Functions
+  private async makeAuthenticatedRequest(url: string, options: RequestInit = {}): Promise<Response> {
+    const token = await this.getAuthToken();
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response;
+  }
+
+  // Sync local dictionary with server
+  async syncFromServer(): Promise<void> {
+    if (this.syncInProgress || !auth.currentUser) return;
+
+    try {
+      this.syncInProgress = true;
+      console.log('🔄 Syncing personal dictionary from server...');
+
+      const response = await this.makeAuthenticatedRequest(`${this.baseUrl}/getDictionary`);
+      const serverData: ServerDictionaryResponse = await response.json();
+
+      if (serverData.success && serverData.data.dictionary) {
+        // Clear local database and rebuild from server data
+        await this.clear();
+
+        for (const word of serverData.data.dictionary) {
+          await this.addWordLocal({
+            id: `server-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            word: word.toLowerCase(),
+            addedAt: new Date(),
+            category: 'custom',
+            userId: auth.currentUser?.uid
+          });
+        }
+
+        console.log(`✅ Synced ${serverData.data.dictionary.length} words from server`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to sync from server:', error);
+    } finally {
+      this.syncInProgress = false;
+    }
+  }
+
+  // Sync local changes to server
+  async syncToServer(word: string, action: 'add' | 'remove'): Promise<void> {
+    if (!auth.currentUser) return;
+
+    try {
+      if (action === 'add') {
+        await this.makeAuthenticatedRequest(`${this.baseUrl}/addDictionaryTerm`, {
+          method: 'POST',
+          body: JSON.stringify({
+            word,
+            category: 'custom'
+          })
+        });
+      } else if (action === 'remove') {
+        await this.makeAuthenticatedRequest(`${this.baseUrl}/removeDictionaryTerm`, {
+          method: 'DELETE',
+          body: JSON.stringify({ word })
+        });
+      }
+
+      console.log(`✅ Synced "${word}" ${action} to server`);
+    } catch (error) {
+      console.warn(`⚠️ Failed to sync "${word}" ${action} to server:`, error);
+      // Don't throw - allow local operations to continue even if server sync fails
+    }
   }
 
   // Load all words into memory cache for fast lookups
@@ -89,7 +221,27 @@ class PersonalDictionaryService {
     return this.cache.has(word.toLowerCase());
   }
 
-  // Add a word to the personal dictionary
+  // Add a word locally to IndexedDB
+  private async addWordLocal(entry: PersonalDictionaryEntry): Promise<PersonalDictionaryEntry> {
+    await this.initialize();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.add(entry);
+
+      request.onsuccess = () => {
+        this.cache.add(entry.word.toLowerCase());
+        resolve(entry);
+      };
+
+      request.onerror = () => {
+        reject(new Error('Failed to add word to local database'));
+      };
+    });
+  }
+
+  // Add a word to the personal dictionary (with server sync)
   async addWord(
     word: string,
     options: {
@@ -116,27 +268,20 @@ class PersonalDictionaryService {
       addedAt: new Date(),
       category: options.category || 'custom',
       notes: options.notes,
-      userId: options.userId
+      userId: options.userId || auth.currentUser?.uid
     };
 
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.storeName], 'readwrite');
-      const store = transaction.objectStore(this.storeName);
-      const request = store.add(entry);
+    // Add to local database first
+    const result = await this.addWordLocal(entry);
 
-      request.onsuccess = () => {
-        this.cache.add(normalizedWord);
-        console.log(`Added word to personal dictionary: "${normalizedWord}"`);
-        resolve(entry);
-      };
+    // Then sync to server (non-blocking)
+    this.syncToServer(normalizedWord, 'add').catch(console.warn);
 
-      request.onerror = () => {
-        reject(new Error('Failed to add word to dictionary'));
-      };
-    });
+    console.log(`Added word to personal dictionary: "${normalizedWord}"`);
+    return result;
   }
 
-  // Remove a word from the personal dictionary
+  // Remove a word from the personal dictionary (with server sync)
   async removeWord(word: string): Promise<boolean> {
     await this.initialize();
 
@@ -157,6 +302,10 @@ class PersonalDictionaryService {
           const deleteRequest = store.delete(request.result);
           deleteRequest.onsuccess = () => {
             this.cache.delete(normalizedWord);
+
+            // Sync to server (non-blocking)
+            this.syncToServer(normalizedWord, 'remove').catch(console.warn);
+
             console.log(`Removed word from personal dictionary: "${normalizedWord}"`);
             resolve(true);
           };
@@ -287,6 +436,92 @@ class PersonalDictionaryService {
   // Check if the service is ready
   isReady(): boolean {
     return this.isInitialized && this.db !== null;
+  }
+
+  // Manual sync trigger for UI
+  async manualSync(): Promise<{ success: boolean; message: string; wordsCount?: number }> {
+    if (!auth.currentUser) {
+      return { success: false, message: 'User not authenticated' };
+    }
+
+    if (this.syncInProgress) {
+      return { success: false, message: 'Sync already in progress' };
+    }
+
+    try {
+      await this.syncFromServer();
+      return {
+        success: true,
+        message: 'Dictionary synced successfully',
+        wordsCount: this.cache.size
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Sync failed'
+      };
+    }
+  }
+
+  // Get sync status for UI indicators
+  getSyncStatus(): PersonalDictionaryStats['syncStatus'] {
+    if (!auth.currentUser) return 'offline';
+    if (this.syncInProgress) return 'pending';
+    return 'synced'; // Assume synced if no sync in progress and user authenticated
+  }
+
+  // Check if user is authenticated for server features
+  isUserAuthenticated(): boolean {
+    return !!auth.currentUser;
+  }
+
+  // Periodic background sync (optional enhancement)
+  private syncInterval: NodeJS.Timeout | null = null;
+
+  // Start periodic background sync (every 5 minutes when user is authenticated)
+  startPeriodicSync(intervalMinutes: number = 5): void {
+    this.stopPeriodicSync(); // Clear any existing interval
+
+    if (!this.isUserAuthenticated()) {
+      console.log('⚠️ Cannot start periodic sync - user not authenticated');
+      return;
+    }
+
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    this.syncInterval = setInterval(async () => {
+      if (this.isUserAuthenticated() && !this.syncInProgress) {
+        console.log(`🔄 Periodic sync starting (every ${intervalMinutes} minutes)`);
+        try {
+          await this.syncFromServer();
+          console.log('✅ Periodic sync completed successfully');
+        } catch (error) {
+          console.warn('⚠️ Periodic sync failed:', error);
+        }
+      }
+    }, intervalMs);
+
+    console.log(`🔄 Periodic sync started (every ${intervalMinutes} minutes)`);
+  }
+
+  // Stop periodic background sync
+  stopPeriodicSync(): void {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+      console.log('⏹️ Periodic sync stopped');
+    }
+  }
+
+  // Enhanced cleanup method
+  cleanup(): void {
+    this.stopPeriodicSync();
+    this.cache.clear();
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+    this.isInitialized = false;
   }
 }
 

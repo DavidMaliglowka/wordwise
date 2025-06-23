@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../../contexts/AuthContext';
 import {
   DocumentTextIcon,
@@ -20,15 +21,16 @@ interface DashboardLayoutProps {
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { user, signOut } = useAuthContext();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
   const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false);
   const [showGetProModal, setShowGetProModal] = useState(false);
 
   const navigation = [
-    { name: 'Documents', icon: DocumentTextIcon, href: '/documents', current: true },
+    { name: 'Documents', icon: DocumentTextIcon, href: '/dashboard', current: location.pathname === '/dashboard' },
     { name: 'Version History', icon: ClockIcon, href: null, current: false, onClick: () => setShowVersionHistoryModal(true) },
-    { name: 'Account', icon: UserCircleIcon, href: '/account', current: false },
+    { name: 'Account', icon: UserCircleIcon, href: '/account', current: location.pathname === '/account' },
   ];
 
   const handleSignOut = async () => {
@@ -206,11 +208,11 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
             );
           }
 
-          // Otherwise render as regular link
+          // Otherwise render as Link
           return (
-            <a
+            <Link
               key={item.name}
-              href={item.href || '#'}
+              to={item.href || '#'}
               className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 item.current
                   ? 'bg-gray-100 text-gray-900 border-l-4 border-indigo-600'
@@ -223,7 +225,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
                 }`}
               />
               {item.name}
-            </a>
+            </Link>
           );
         })}
 

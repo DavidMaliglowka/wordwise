@@ -228,11 +228,21 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
     return;
   }
 
+  // Enhanced approach: For passive voice, mark the entire sentence
+  const isPassiveVoice = suggestion.type === 'passive';
+  const targetText = isPassiveVoice ?
+    findContainingSentence(textContent, suggestion.range.start, suggestion.range.end) :
+    suggestion.original;
+
+  console.log(`📝 MARK DEBUG: ${isPassiveVoice ? 'Sentence-level' : 'Standard'} marking:`, {
+    targetText,
+    isPassiveVoice
+  });
+
   // Simple approach: Find the first text node that contains our target text
   function findAndMarkText(node: any): boolean {
     if (node.getType && node.getType() === 'text') {
       const nodeText = node.getTextContent();
-      const targetText = suggestion.original;
 
       console.log(`🔍 MARK DEBUG: Checking text node:`, {
         nodeText: nodeText.substring(0, 50) + (nodeText.length > 50 ? '...' : ''),
@@ -329,4 +339,46 @@ export function removeGrammarMark(suggestionId: string): void {
 // Helper function to check if marks are currently being applied
 export function isApplyingGrammarMarks(): boolean {
   return false; // This will be managed by the plugin instance
+}
+
+// Helper function to find the containing sentence for passive voice marking
+function findContainingSentence(text: string, startOffset: number, endOffset: number): string {
+  console.log(`🔍 SENTENCE DEBUG: Finding sentence containing range ${startOffset}-${endOffset}`);
+
+  // Simple sentence boundary detection - can be enhanced later
+  const sentenceEnders = /[.!?]/g;
+
+  // Find sentence start (look backwards from startOffset)
+  let sentenceStart = 0;
+  for (let i = startOffset - 1; i >= 0; i--) {
+    if (sentenceEnders.test(text[i])) {
+      sentenceStart = i + 1;
+      break;
+    }
+  }
+
+  // Skip leading whitespace
+  while (sentenceStart < text.length && /\s/.test(text[sentenceStart])) {
+    sentenceStart++;
+  }
+
+  // Find sentence end (look forwards from endOffset)
+  let sentenceEnd = text.length;
+  for (let i = endOffset; i < text.length; i++) {
+    if (sentenceEnders.test(text[i])) {
+      sentenceEnd = i + 1;
+      break;
+    }
+  }
+
+  const sentence = text.substring(sentenceStart, sentenceEnd).trim();
+
+  console.log(`🔍 SENTENCE DEBUG: Found sentence:`, {
+    sentenceStart,
+    sentenceEnd,
+    sentence: sentence.substring(0, 100) + (sentence.length > 100 ? '...' : ''),
+    originalRange: `${startOffset}-${endOffset}`
+  });
+
+  return sentence;
 }
