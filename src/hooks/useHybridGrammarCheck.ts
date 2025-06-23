@@ -11,6 +11,70 @@ import {
   GrammarSuggestionType
 } from '../types/grammar';
 
+// === THE DEFINITIVE FIX: VERIFY AND CORRECT ALL SUGGESTIONS ===
+/**
+ * Verifies and corrects suggestion ranges against the source text.
+ * This is the ultimate fix for all offset-related bugs.
+ * @param suggestions The raw suggestions from a grammar engine.
+ * @param sourceText The exact text the suggestions were generated for.
+ * @returns A new array of suggestions with verified and corrected ranges.
+ */
+function verifyAndCorrectSuggestions(
+  suggestions: any[],
+  sourceText: string,
+): any[] {
+  if (!suggestions || suggestions.length === 0) {
+    return [];
+  }
+
+  const correctedSuggestions: any[] = [];
+
+  for (const suggestion of suggestions) {
+    const { start, end } = suggestion.range;
+    const expectedText = suggestion.flaggedText || suggestion.original || '';
+
+    // Safety check for valid data
+    if (typeof expectedText !== 'string' || end > sourceText.length || start < 0) {
+      console.warn('Discarding malformed or out-of-bounds suggestion:', suggestion);
+      continue;
+    }
+
+    const actualText = sourceText.substring(start, end);
+
+    if (actualText === expectedText) {
+      // The offset is correct. Keep the suggestion.
+      correctedSuggestions.push(suggestion);
+    } else {
+      // The offset is WRONG. Try to find the real position.
+      console.warn(
+        `Offset mismatch for "${expectedText}". Expected to find it at range ${start}-${end}, but found "${actualText}". Searching for new position.`
+      );
+
+      // Search for the text in a window around the reported position.
+      const searchWindowStart = Math.max(0, start - 50);
+      const correctedStart = sourceText.indexOf(expectedText, searchWindowStart);
+
+      if (correctedStart !== -1) {
+        // We found it! Create a new suggestion with the corrected range.
+        const correctedSuggestion = {
+          ...suggestion,
+          range: {
+            start: correctedStart,
+            end: correctedStart + expectedText.length,
+          },
+        };
+        correctedSuggestions.push(correctedSuggestion);
+        console.log(`✅ Position for "${expectedText}" auto-corrected to ${correctedSuggestion.range.start}.`);
+      } else {
+        // If we can't find it nearby, the suggestion is unreliable. Discard it.
+        console.error(`Could not find "${expectedText}" near offset ${start}. Discarding suggestion.`);
+      }
+    }
+  }
+
+  return correctedSuggestions;
+}
+
 interface UseHybridGrammarCheckResult {
   suggestions: EditorSuggestion[];
   isLoading: boolean;
@@ -148,7 +212,9 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
 
       // Check if this is still the current request
       if (requestId === currentRequestRef.current) {
-        const editorSuggestions = convertToEditorSuggestions(result.suggestions);
+        // === USE THE VERIFICATION FUNCTION HERE ===
+        const verifiedSuggestions = verifyAndCorrectSuggestions(result.suggestions, text);
+        const editorSuggestions = convertToEditorSuggestions(verifiedSuggestions);
         setSuggestions(editorSuggestions);
         setLastCheckedText(text);
         setError(null);
@@ -156,11 +222,11 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
         const processingTime = performance.now() - startTime;
         setStats(prev => ({
           ...prev,
-          clientSuggestions: result.suggestions.length,
+          clientSuggestions: verifiedSuggestions.length,
           totalProcessingTime: processingTime
         }));
 
-        console.log(`✅ Hybrid grammar check complete: ${result.suggestions.length} suggestions in ${processingTime.toFixed(1)}ms`);
+        console.log(`✅ Hybrid grammar check complete: ${result.suggestions.length} raw suggestions, ${verifiedSuggestions.length} verified suggestions in ${processingTime.toFixed(1)}ms`);
       }
     } catch (err: any) {
       // Only update state if this is still the current request and not aborted

@@ -157,8 +157,9 @@ export class UnicodePositionMapper {
   private coordinateMappings: CoordinateMapping[] = [];
 
   constructor(private text: string) {
-    // Always normalize to NFC first as per grammar-refactor.md
-    this.text = unorm.nfc(text);
+    // === CRITICAL FIX: Use raw text directly ===
+    // Remove normalization to ensure offsets match exactly with Lexical editor
+    this.text = text;
     this.positionMap = this.buildPositionMap();
   }
 
@@ -317,20 +318,21 @@ export class ClientGrammarEngine {
   }
 
   async analyzeSuggestions(text: string): Promise<ClientSuggestion[]> {
-    // Normalize text first and build position map per grammar-refactor.md
-    const normalizedText = unorm.nfc(text);
-    const positionMapper = new UnicodePositionMapper(normalizedText);
+    // === CRITICAL FIX: Use raw text directly from the editor ===
+    // Remove normalization to ensure offsets match exactly with Lexical editor
+    const positionMapper = new UnicodePositionMapper(text);
+    const textToProcess = text; // Use the original text
 
     try {
       const processor = await this.getProcessor();
-      const file = await processor.process(normalizedText);
+      const file = await processor.process(textToProcess);
 
       // Only log if there are messages to avoid spam
       if (file.messages.length > 0) {
         console.log(`📝 Found ${file.messages.length} grammar suggestions`);
       }
 
-      const suggestions = file.messages.map((message: any) => {
+      const suggestions = file.messages.map((message: any): ClientSuggestion | null => {
         // Extract position information from retext message
         // Based on debug results: retext uses 'place' property for positions
         let rawStart = 0;
@@ -350,11 +352,44 @@ export class ClientGrammarEngine {
           rawEnd = message.end || rawStart;
         }
 
-        // Validate and correct positions using the position mapper
-        const { start, end } = positionMapper.validateUtf16Range(rawStart, rawEnd);
+        // === THE FIX: VERIFY AND CORRECT THE OFFSETS ===
+
+        // `message.actual` is the exact string retext flagged.
+        const expectedText = message.actual;
+        // `textToProcess.slice(...)` is what the text *actually* is at that position.
+        const textAtReportedPosition = textToProcess.slice(rawStart, rawEnd);
+
+        let start = rawStart;
+        let end = rawEnd;
+
+        // If the text at the reported position doesn't match what retext *thinks* it flagged,
+        // the offset is wrong. We must correct it.
+        if (expectedText && textAtReportedPosition !== expectedText) {
+          console.warn(`Retext offset mismatch! Expected "${expectedText}" but found "${textAtReportedPosition}" at offset ${start}. Attempting to correct.`);
+
+          // Search for the expected text in a small window around the reported offset.
+          // This is more reliable than searching the whole document.
+          const searchWindowStart = Math.max(0, start - 25);
+          const correctedStart = textToProcess.indexOf(expectedText, searchWindowStart);
+
+          if (correctedStart !== -1) {
+            console.log(`✅ Offset corrected from ${start} to ${correctedStart}`);
+            start = correctedStart;
+            end = start + expectedText.length;
+          } else {
+            // If we can't find the text nearby, the suggestion is unreliable. Skip it.
+            console.error(`Could not find "${expectedText}" near offset ${start}. Discarding suggestion.`);
+            return null;
+          }
+        }
+
+        // Apply final validation using the position mapper
+        const validatedRange = positionMapper.validateUtf16Range(start, end);
+        start = validatedRange.start;
+        end = validatedRange.end;
 
         // Extract the actual text being flagged
-        const flaggedText = normalizedText.slice(start, end);
+        const flaggedText = textToProcess.slice(start, end);
 
         // Determine suggestion type and extract replacement
         const isSpelling = message.source === 'retext-spell' || message.ruleId?.includes('spell');
@@ -401,7 +436,8 @@ export class ClientGrammarEngine {
         };
 
         return suggestion;
-      });
+      })
+      .filter((s: ClientSuggestion | null): s is ClientSuggestion => s !== null); // Filter out any discarded suggestions
 
       // Filter out suggestions for words in the personal dictionary
       const filteredSuggestions = await this.filterPersonalDictionaryWords(suggestions);

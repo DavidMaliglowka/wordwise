@@ -63,35 +63,12 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
       return;
     }
 
-    // Normalize text to handle problematic characters
-    const normalizedText = text
-      // Normalize Unicode (decomposed to composed)
-      .normalize('NFC')
-      // Replace smart quotes with regular quotes
-      .replace(/[""]/g, '"')
-      .replace(/['']/g, "'")
-      // Replace em/en dashes with regular hyphens
-      .replace(/[—–]/g, '-')
-      // Replace non-breaking spaces with regular spaces
-      .replace(/\u00A0/g, ' ')
-      // Replace other problematic whitespace characters
-      .replace(/[\u2000-\u200B\u2028\u2029\uFEFF]/g, ' ')
-      // Clean up multiple spaces
-      .replace(/\s+/g, ' ')
-      // Trim
-      .trim();
+    // === CRITICAL FIX: Use raw text directly from the editor ===
+    // Remove normalization to ensure offsets match exactly with Lexical editor
+    const textToProcess = text;
 
-    // Debug: Log the original and normalized text
-    if (text !== normalizedText) {
-      console.log('🔧 Text normalization applied:');
-      console.log('Original length:', text.length);
-      console.log('Normalized length:', normalizedText.length);
-      console.log('Original (first 100 chars):', JSON.stringify(text.substring(0, 100)));
-      console.log('Normalized (first 100 chars):', JSON.stringify(normalizedText.substring(0, 100)));
-    }
-
-    console.log('🔧 Validating normalized text...');
-    const validation = GrammarService.validateText(normalizedText);
+    console.log('🔧 Validating text...');
+    const validation = GrammarService.validateText(textToProcess);
     console.log('🔧 Validation result:', validation);
     if (!validation.isValid) {
       console.log('🔧 Validation failed:', validation.error);
@@ -117,7 +94,7 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
 
     try {
             console.log('🔧 Calling GrammarService.checkGrammar with:', {
-        textLength: normalizedText.length,
+        textLength: textToProcess.length,
         language: 'en',
         includeSpelling: config.includeSpelling,
         includeGrammar: config.includeGrammar,
@@ -127,7 +104,7 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
 
       // Force no cache to bypass the cached empty result
       const response = await GrammarService.checkGrammar({
-        text: normalizedText,
+        text: textToProcess,
         language: 'en',
         includeSpelling: config.includeSpelling,
         includeGrammar: config.includeGrammar,
@@ -140,7 +117,7 @@ export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): Use
       if (requestId === currentRequestRef.current) {
         const editorSuggestions = GrammarService.createEditorSuggestions(response.suggestions);
         setSuggestions(editorSuggestions);
-        setLastCheckedText(normalizedText); // Store normalized text
+        setLastCheckedText(textToProcess); // Store original text
         setError(null);
         // Reset applied suggestions for new text
         appliedSuggestionsRef.current = [];
