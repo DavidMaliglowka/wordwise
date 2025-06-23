@@ -237,15 +237,27 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
   });
 
   // Enhanced approach: For passive voice, mark the entire sentence
-  const isPassiveVoice = suggestion.type === 'passive';
-  const targetText = isPassiveVoice ?
-    findContainingSentence(textContent, suggestion.range.start, suggestion.range.end) :
-    suggestion.original;
+  const isPassiveVoice = suggestion.type === 'passive' || suggestion.type === 'style';
+  let targetStart = suggestion.range.start;
+  let targetEnd = suggestion.range.end;
 
-  console.log(`📝 MARK DEBUG: ${isPassiveVoice ? 'Sentence-level' : 'Standard'} marking:`, {
-    targetText,
-    isPassiveVoice
-  });
+  if (isPassiveVoice) {
+    // Find sentence boundaries for passive voice suggestions
+    const sentenceInfo = findContainingSentenceWithRange(textContent, suggestion.range.start, suggestion.range.end);
+    targetStart = sentenceInfo.start;
+    targetEnd = sentenceInfo.end;
+
+    console.log(`📝 MARK DEBUG: Sentence-level marking for passive voice:`, {
+      originalRange: `${suggestion.range.start}-${suggestion.range.end}`,
+      sentenceRange: `${targetStart}-${targetEnd}`,
+      sentenceText: sentenceInfo.text.substring(0, 100) + (sentenceInfo.text.length > 100 ? '...' : '')
+    });
+  } else {
+    console.log(`📝 MARK DEBUG: Standard word-level marking:`, {
+      range: `${targetStart}-${targetEnd}`,
+      text: suggestion.original
+    });
+  }
 
   // ENHANCED: Position-based marking instead of text-based searching
   function findAndMarkTextByPosition(node: any, currentPosition: number = 0): { found: boolean; newPosition: number } {
@@ -264,9 +276,7 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
         nodeLength
       });
 
-      // Check if our target range overlaps with this text node
-      const targetStart = suggestion.range.start;
-      const targetEnd = suggestion.range.end;
+      // Use the updated target range (sentence-level for passive voice)
 
       // Does the suggestion range overlap with this text node?
       if (targetStart < nodeEnd && targetEnd > nodeStart) {
@@ -380,7 +390,7 @@ export function isApplyingGrammarMarks(): boolean {
 }
 
 // Helper function to find the containing sentence for passive voice marking
-function findContainingSentence(text: string, startOffset: number, endOffset: number): string {
+function findContainingSentenceWithRange(text: string, startOffset: number, endOffset: number): { text: string; start: number; end: number } {
   console.log(`🔍 SENTENCE DEBUG: Finding sentence containing range ${startOffset}-${endOffset}`);
 
   // Simple sentence boundary detection - can be enhanced later
@@ -418,5 +428,9 @@ function findContainingSentence(text: string, startOffset: number, endOffset: nu
     originalRange: `${startOffset}-${endOffset}`
   });
 
-  return sentence;
+  return {
+    text: sentence,
+    start: sentenceStart,
+    end: sentenceEnd
+  };
 }

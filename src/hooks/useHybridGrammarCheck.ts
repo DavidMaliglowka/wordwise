@@ -80,23 +80,31 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
 
   // Convert client suggestions to editor format
   const convertToEditorSuggestions = useCallback((clientSuggestions: any[]): EditorSuggestion[] => {
-    return clientSuggestions.map(suggestion => ({
-      id: suggestion.id,
-      range: {
-        start: suggestion.range.start,
-        end: suggestion.range.end
-      },
-      type: mapClientTypeToGrammarType(suggestion.type),
-      category: mapClientTypeToCategory(suggestion.type),
-      original: suggestion.flaggedText || '',
-      proposed: suggestion.replacement || '',
-      explanation: suggestion.message,
-      confidence: suggestion.confidence / 100, // Convert percentage to decimal
-      severity: suggestion.severity === 'error' ? 'high' : suggestion.severity === 'warning' ? 'medium' : 'low',
-      isVisible: true,
-      isHovered: false,
-      isDismissed: false
-    }));
+    return clientSuggestions.map(suggestion => {
+      const isPassiveVoice = suggestion.type === 'passive' ||
+                            (suggestion.type === 'style' && suggestion.message?.toLowerCase().includes('passive'));
+
+      return {
+        id: suggestion.id,
+        range: {
+          start: suggestion.range.start,
+          end: suggestion.range.end
+        },
+        type: mapClientTypeToGrammarType(suggestion.type),
+        category: mapClientTypeToCategory(suggestion.type),
+        original: suggestion.flaggedText || '',
+        proposed: suggestion.replacement || '',
+        explanation: suggestion.message,
+        confidence: suggestion.confidence / 100, // Convert percentage to decimal
+        severity: suggestion.severity === 'error' ? 'high' : suggestion.severity === 'warning' ? 'medium' : 'low',
+        isVisible: true,
+        isHovered: false,
+        isDismissed: false,
+        // Add regeneration support for passive voice suggestions
+        canRegenerate: isPassiveVoice,
+        regenerateId: isPassiveVoice ? `regen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined
+      };
+    });
   }, []);
 
   // Main grammar check function

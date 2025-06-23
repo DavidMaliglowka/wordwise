@@ -60,7 +60,8 @@ const DocumentEditor: React.FC = () => {
     includeSpelling: true,
     includeGrammar: true,
     includeStyle: true, // Enable style suggestions with hybrid
-    enableCache: true
+    enableCache: true,
+    enhancePassiveVoice: true // Enable GPT-4o passive voice enhancements
   });
 
   // Categorize suggestions for UI display
@@ -247,18 +248,16 @@ const DocumentEditor: React.FC = () => {
       try {
         setLoading(true);
         if (id === 'new') {
-          // Create a new document
-          const newDocId = await FirestoreService.Document.createDocument({
-            uid: user.uid,
+          // Create a new document using the same service as the dashboard
+          const newDocument = await DocumentService.createDocument({
             title: 'Untitled Document',
             content: '',
             contentType: 'other',
-            status: 'draft',
             goals: [],
           });
 
           // Navigate to the new document
-          navigate(`/editor/${newDocId}`, { replace: true });
+          navigate(`/editor/${newDocument.id}`, { replace: true });
           return;
         }
 
@@ -386,9 +385,8 @@ const DocumentEditor: React.FC = () => {
       setSaving(true);
       console.log('🔧 SAVE STATE DEBUG: Starting save operation');
 
-            await FirestoreService.Document.updateDocument(document.id, {
+            await DocumentService.updateDocument(document.id, {
         content: dataToSave.content,
-        updatedAt: new Date() as any,
       });
 
       console.log('🔧 SAVE STATE DEBUG: Save completed - setting hasUnsavedChanges to false');
@@ -399,7 +397,6 @@ const DocumentEditor: React.FC = () => {
       setDocument(prev => prev ? {
         ...prev,
         content: dataToSave.content,
-        updatedAt: new Date() as any,
       } : null);
 
     } catch (error) {
@@ -427,15 +424,13 @@ const DocumentEditor: React.FC = () => {
     if (!document || !user || !newTitle.trim()) return;
 
     try {
-      await FirestoreService.Document.updateDocument(document.id, {
+      await DocumentService.updateDocument(document.id, {
         title: newTitle.trim(),
-        updatedAt: new Date() as any,
       });
 
       setDocument(prev => prev ? {
         ...prev,
         title: newTitle.trim(),
-        updatedAt: new Date() as any,
       } : null);
     } catch (error) {
       console.error('Error updating title:', error);
