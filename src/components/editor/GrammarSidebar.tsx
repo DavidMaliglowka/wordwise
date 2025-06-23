@@ -144,7 +144,7 @@ const GrammarSidebar: React.FC<GrammarSidebarProps> = ({
       </div>
 
       {/* Original vs proposed text */}
-      <div className="mb-2">
+      <div className="mb-2 break-words">
         <div className="text-sm">
           <span className="line-through text-red-600 font-medium">"{suggestion.original}"</span>
           <span className="mx-2 text-gray-400">→</span>

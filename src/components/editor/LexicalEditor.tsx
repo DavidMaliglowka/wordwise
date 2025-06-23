@@ -103,7 +103,7 @@ function UpdateContentPlugin({
           paragraph.append(text);
           root.append(paragraph);
         }
-      }, { discrete: true }); // This prevents triggering update listeners
+      });
 
       // Call the callback after update
       if (onUpdate) {

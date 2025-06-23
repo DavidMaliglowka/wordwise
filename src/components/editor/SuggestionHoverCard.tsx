@@ -273,7 +273,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
 
             {/* Original text */}
             {currentSuggestion.original && (
-              <div className="mb-2">
+              <div className="mb-2 break-words">
                 <span className="text-xs font-medium text-gray-600">Original:</span>
                 <div className="bg-red-100 text-red-800 px-2 py-1 rounded text-sm mt-1">
                   "{currentSuggestion.original}"
@@ -283,7 +283,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
 
             {/* Suggested replacement */}
             {currentSuggestion.proposed && (
-              <div className="mb-3">
+              <div className="mb-3 break-words">
                 <span className="text-xs font-medium text-gray-600">Suggested:</span>
                 <div className="bg-green-100 text-green-800 px-2 py-1 rounded text-sm mt-1">
                   "{currentSuggestion.proposed}"

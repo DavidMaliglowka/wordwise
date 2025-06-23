@@ -1156,11 +1156,149 @@
             "testStrategy": "Utilize iterative feedback loops with design reviews and user acceptance testing to ensure that all changes align with expected outcomes."
           }
         ]
+      },
+      {
+        "id": 27,
+        "title": "Improve WordWise AI Editor Quality and Stability",
+        "description": "Address critical issues in the WordWise AI Editor including cursor instability, race conditions during suggestion clicks, UI overflow, undo anomalies, and incomplete mark clearing.",
+        "details": "Implement fixes based on analysis by the Senior Staff Engineer: (1) Preserve the editor's selection state during grammar mark updates to prevent cursor jumping. (2) Use content refs and proper state synchronization methods to mitigate race conditions that cause page crashes on fast suggestion clicks. (3) Add CSS word-break utilities and responsive styling to handle overflow issues with long misspelled words. (4) Optimize the history stack management to ensure a single undo action fully reverts a suggestion application. (5) Refactor the mark clearing logic to address edge cases where marks remain uncleared. Ensure that these changes integrate seamlessly with the existing rich-text editor component and UI adjustments previously implemented.",
+        "testStrategy": "Conduct thorough manual and automated testing. Validate that the cursor remains stable during text updates by simulating rapid typing and mark changes. Reproduce fast suggestion click scenarios and confirm that race conditions are resolved without page crashes. Check the UI with extremely long words to ensure proper text wrapping and overflow handling. Test the undo functionality to verify that a single undo action reverts the correct changes, and review edge cases to ensure all marks are cleared appropriately. Finally, perform regression tests on the editor to confirm other functionalities remain unaffected.",
+        "status": "done",
+        "dependencies": [
+          6,
+          15
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Fix Cursor Jumping During Typing",
+            "description": "Modify GrammarPlugin.tsx to preserve editor selection state when applying grammar marks to prevent cursor jumping. The issue occurs because grammar mark updates reset the cursor position.",
+            "details": "**Problem:** While typing, debounced grammar checks fire and update marks, causing cursor to jump to end of document.\n\n**Solution:** Save and restore editor selection state before/after applying marks.\n\n**Code Changes Required:**\n\nFile: `src/components/editor/GrammarPlugin.tsx`\n\nReplace the editor.update call in the useEffect:\n\n```typescript\neditor.update(() => {\n  const selection = $getSelection()?.clone();\n  const isFocused = editor.isFocused();\n  console.log('🔄 Starting mark application cycle');\n\n  // Always clear existing marks first\n  clearAllGrammarMarks();\n\n  // Apply new marks for visible suggestions (only if we have suggestions)\n  if (suggestions.length > 0) {\n    suggestions.forEach(suggestion => {\n      if (suggestion.isVisible !== false && suggestion.isDismissed !== true) {\n        applyGrammarMark(suggestion);\n      }\n    });\n  }\n\n  // Restore selection if the editor was focused to prevent cursor jumping\n  if (isFocused && selection) {\n    $setSelection(selection);\n  }\n\n  console.log('✅ Mark application cycle complete');\n}, {\n  tag: 'history-merge', // Merge with previous history state to help with undo\n  onUpdate: () => {\n    // Reset flag after update is complete\n    setTimeout(() => {\n      isApplyingMarks.current = false;\n      onMarkApplicationEnd?.();\n    }, 10);\n  }\n});\n```\n\n**Testing:** Verify cursor stays in position while typing and grammar suggestions appear.",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 2,
+            "title": "Fix Page Crashing on Fast Clicks",
+            "description": "Implement contentRef in DocumentEditor.tsx to prevent race conditions when applying suggestions rapidly. The issue occurs when multiple suggestion applications use stale state.",
+            "details": "**Problem:** Fast clicking on suggestion apply buttons causes crashes due to race conditions. Second click uses stale editor content state.\n\n**Solution:** Use useRef to store latest content and add concurrency guard.\n\n**Code Changes Required:**\n\nFile: `src/pages/DocumentEditor.tsx`\n\n1. **Add contentRef declaration:**\n```typescript\nconst editorRef = useRef<LexicalEditorRef>(null);\nconst contentRef = useRef(''); // Ref to hold the latest content string\nconst isApplyingSuggestion = useRef(false);\nconst isApplyingMarks = useRef(false);\nconst [document, setDocument] = useState<Document | null>(null);\n```\n\n2. **Update handleApplySuggestion function:**\n```typescript\n// Handle applying a suggestion\nconst handleApplySuggestion = useCallback((suggestion: EditorSuggestion) => {\n  // Prevent concurrent applications to avoid race conditions\n  if (isApplyingSuggestion.current) {\n    console.warn('Skipping suggestion application, already in progress.');\n    return;\n  }\n\n  isApplyingSuggestion.current = true;\n  console.log('🔧 HYBRID APPLY DEBUG: Starting suggestion application', {\n    suggestionId: suggestion.id,\n    original: suggestion.original,\n    proposed: suggestion.proposed,\n    currentContentLength: contentRef.current.length,\n    timestamp: new Date().toISOString()\n  });\n\n  try {\n    // Use contentRef.current to ensure we have the latest text\n    const result = applySuggestion(suggestion.id, contentRef.current);\n\n    if (result && editorRef.current) {\n      console.log('🔧 HYBRID APPLY DEBUG: Suggestion applied successfully', {\n        oldTextLength: contentRef.current.length,\n        newTextLength: result.newText.length,\n        textChanged: result.newText !== contentRef.current\n      });\n\n      // Update the actual Lexical editor content\n      editorRef.current.updateContent(result.newText);\n\n      // Update the editor state and content ref\n      const newStateData = {\n        content: result.newText,\n        html: result.newText,\n        wordCount: result.newText.trim().split(/\\s+/).filter(Boolean).length,\n        characterCount: result.newText.length,\n        isEmpty: result.newText.trim().length === 0,\n      };\n      setEditorState(newStateData);\n      contentRef.current = result.newText;\n\n      // Mark as having unsaved changes\n      setHasUnsavedChanges(true);\n\n      // Reset flag and trigger new grammar check after content is updated\n      setTimeout(() => {\n        console.log('🔧 HYBRID APPLY DEBUG: Resetting flag and triggering recheck');\n        isApplyingSuggestion.current = false;\n\n        // Trigger a fresh grammar check to update marks for the new content\n        if (result.newText && result.newText.trim().length > 0) {\n          console.log('🔄 HYBRID APPLY DEBUG: Triggering grammar recheck after suggestion application');\n          checkGrammar(result.newText);\n        } else {\n          console.log('🧹 HYBRID APPLY DEBUG: Clearing suggestions - no content remaining');\n          clearSuggestions();\n        }\n      }, 100); // Faster for hybrid approach\n    } else {\n      console.error('🚨 HYBRID APPLY DEBUG: Failed to apply suggestion or no editor ref', {\n        hasResult: !!result,\n        hasEditorRef: !!editorRef.current\n      });\n      isApplyingSuggestion.current = false;\n    }\n  } catch (error) {\n    console.error('🚨 HYBRID APPLY DEBUG: Error in handleApplySuggestion:', error);\n    isApplyingSuggestion.current = false;\n  }\n}, [applySuggestion, checkGrammar, clearSuggestions]);\n```\n\n3. **Update contentRef in handleEditorChange:**\n```typescript\n// Update content ref to have the latest text available for handlers\ncontentRef.current = stateData.content;\n\n// Skip grammar checking if we're currently applying a suggestion or marks to prevent infinite loops\nif (isApplyingSuggestion.current || isApplyingMarks.current) {\n  console.log('⏸️ Skipping grammar check - applying changes:', {\n    isApplyingSuggestion: isApplyingSuggestion.current,\n    isApplyingMarks: isApplyingMarks.current\n  });\n  return;\n}\n```\n\n**Testing:** Verify rapid clicking on apply buttons doesn't crash the page.",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 3,
+            "title": "Fix UI Overflow with Long Misspelled Words",
+            "description": "Add break-words CSS utility to SuggestionHoverCard.tsx and GrammarSidebar.tsx to prevent long words from overflowing containers and breaking layout.",
+            "details": "**Problem:** Long misspelled words without spaces overflow their containers in suggestion UI components, breaking the layout.\n\n**Solution:** Add Tailwind CSS `break-words` utility class to relevant containers.\n\n**Code Changes Required:**\n\nFile: `src/components/editor/SuggestionHoverCard.tsx`\n\n1. **Add break-words to original text container:**\n```typescript\n{/* Original text */}\n{currentSuggestion.original && (\n  <div className=\"mb-2 break-words\">\n    <span className=\"text-xs font-medium text-gray-600\">Original:</span>\n    <div className=\"bg-red-100 text-red-800 px-2 py-1 rounded text-sm mt-1\">\n      \"{currentSuggestion.original}\"\n    </div>\n  </div>\n)}\n```\n\n2. **Add break-words to proposed text container:**\n```typescript\n{/* Suggested replacement */}\n{currentSuggestion.proposed && (\n  <div className=\"mb-3 break-words\">\n    <span className=\"text-xs font-medium text-gray-600\">Suggested:</span>\n    <div className=\"bg-green-100 text-green-800 px-2 py-1 rounded text-sm mt-1\">\n      \"{currentSuggestion.proposed}\"\n    </div>\n  </div>\n)}\n```\n\nFile: `src/components/editor/GrammarSidebar.tsx`\n\n**Add break-words to suggestion text container:**\n```typescript\n{/* Original vs proposed text */}\n<div className=\"mb-2 break-words\">\n  <div className=\"text-sm\">\n    <span className=\"line-through text-red-600 font-medium\">\"{suggestion.original}\"</span>\n    <span className=\"mx-2 text-gray-400\">→</span>\n    <span className=\"text-green-600 font-medium\">\"{suggestion.proposed}\"</span>\n  </div>\n</div>\n```\n\n**Testing:** Verify long words wrap properly in both hover cards and sidebar without overflowing containers.",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 4,
+            "title": "Fix Multiple Undo Actions Required",
+            "description": "Optimize history stack management by removing discrete: true from LexicalEditor.tsx and using history-merge tag in GrammarPlugin.tsx to make suggestion applications single undoable actions.",
+            "details": "**Problem:** Applying a single suggestion creates multiple entries in editor's history stack, requiring multiple undo actions. This happens because:\n1. Text replacement uses `discrete: true` creating non-mergeable history entry\n2. Grammar mark application is separate transaction\n\n**Solution:** Remove discrete flag and use history-merge tag to group operations.\n\n**Code Changes Required:**\n\nFile: `src/components/editor/LexicalEditor.tsx`\n\n**Remove discrete: true from updateContent:**\n```typescript\n// Original problematic code:\nroot.append(paragraph);\n}\n}, { discrete: true }); // This prevents triggering update listeners\n\n// Call the callback after update\nif (onUpdate) {\n\n// Updated code:\nroot.append(paragraph);\n}\n});\n\n// Call the callback after update\nif (onUpdate) {\n```\n\n**Additional Fix (Already covered in Subtask 27.1):**\nThe `tag: 'history-merge'` addition in GrammarPlugin.tsx will group the mark updates with the previous text change operation.\n\n**How it works:**\n- Remove `discrete: true` allows text changes to be merged with subsequent operations\n- `tag: 'history-merge'` in mark application groups it with the previous text operation\n- Result: Single undo action for complete suggestion application\n\n**Testing:** \n1. Apply a grammar suggestion\n2. Press Ctrl/Cmd+Z once\n3. Verify entire suggestion (text change + mark removal) is undone in single action",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 5,
+            "title": "Fix Incomplete Mark Clearing Bug",
+            "description": "Fix bug in GrammarPlugin.tsx clearAllGrammarMarks function where traversal stops prematurely after unwrapping a mark node, potentially leaving nested or subsequent marks untouched.",
+            "details": "**Problem:** The `clearAllGrammarMarks` function has a subtle bug where it stops traversing a branch of the editor's node tree after finding and removing a grammar mark. This can lead to some marks not being cleared properly in edge cases.\n\n**Root Cause:** There's a premature `return` statement after unwrapping mark nodes that prevents complete tree traversal.\n\n**Solution:** Remove the premature return statement to ensure complete traversal.\n\n**Code Changes Required:**\n\nFile: `src/components/editor/GrammarPlugin.tsx`\n\n**Fix the clearAllGrammarMarks helper function:**\n\nReplace this section:\n```typescript\n// If no text content, just remove the empty mark\nnode.remove();\nconsole.log('🗑️ CLEAR DEBUG: Removed empty mark node');\n}\n} catch (error) {\nconsole.error('🚨 CLEAR DEBUG: Error unwrapping mark node:', error);\n// Fallback to just removing the node if unwrapping fails\nnode.remove();\n}\nreturn; // ❌ PROBLEMATIC: This stops traversal of siblings\n}\n```\n\nWith this:\n```typescript\n// If no text content, just remove the empty mark\nnode.remove();\nconsole.log('🗑️ CLEAR DEBUG: Removed empty mark node');\n}\n} catch (error) {\nconsole.error('🚨 CLEAR DEBUG: Error unwrapping mark node:', error);\n// Fallback to just removing the node if unwrapping fails\nnode.remove();\n}\n// Do not return; continue traversal to siblings.\n}\n```\n\n**Impact:** This ensures that all grammar marks are properly cleared from the editor, preventing visual artifacts where old marks might remain visible.\n\n**Testing:** \n1. Create content with multiple grammar marks\n2. Apply a suggestion (which triggers mark clearing)\n3. Verify all old marks are removed, not just the first ones encountered",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 6,
+            "title": "Fix Continuous Auto-Save Loop",
+            "description": "Prevent unnecessary auto-saves by adding content change validation to saveDocument function and improve focus detection in GrammarPlugin. The issue occurs when AutoSavePlugin triggers saves even when content hasn't changed, creating an infinite loop.",
+            "details": "**Problem:** The editor gets caught in a continuous save loop because:\n1. AutoSavePlugin triggers saveDocument whenever editor state updates\n2. GrammarPlugin runs editor.update() to apply/clear marks, triggering AutoSavePlugin\n3. saveDocument proceeds even when content hasn't actually changed\n4. This creates an infinite save cycle\n\n**Root Cause:** saveDocument lacks a guard to check for actual content changes before proceeding.\n\n**Solution:** Add content change validation and improve focus detection.\n\n**Code Changes Required:**\n\n**File: `src/pages/DocumentEditor.tsx`**\n\nAdd guard to saveDocument function:\n```typescript\n// Save document\nconst saveDocument = useCallback(async (stateData?: EditorStateData) => {\n  if (!document || !user || saving) return;\n\n  const dataToSave = stateData || editorState;\n\n  // Only save if content has actually changed. This prevents infinite save loops.\n  if (dataToSave.content === document.content) {\n    if (hasUnsavedChanges) {\n      // If UI thinks there are changes, but content is identical, correct the UI state.\n      setHasUnsavedChanges(false);\n    }\n    return; // No need to save.\n  }\n\n  console.log('🔧 SAVE STATE DEBUG: saveDocument called', {\n    contentToSave: dataToSave.content,\n    contentLength: dataToSave.content.length,\n    currentDocumentContent: document.content,\n    currentDocumentContentLength: document.content.length,\n    hasUnsavedChanges,\n    saving,\n    timestamp: new Date().toISOString()\n  });\n\n  try {\n```\n\n**File: `src/components/editor/GrammarPlugin.tsx`**\n\nImprove focus detection using built-in method:\n```typescript\nconst selection = $getSelection()?.clone();\nconst isFocused = editor.isFocused();\nconsole.log('🔄 Starting mark application cycle');\n```\n\n**Testing:** \n1. Verify auto-save only triggers when content actually changes\n2. Confirm no infinite save loops in browser logs\n3. Test that manual saves still work correctly\n4. Verify hasUnsavedChanges state updates properly",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 7,
+            "title": "Fix Mark Application and Suggestion Issues",
+            "description": "Fix three critical issues found during testing: (1) Grammar marks not appearing in editor due to flawed traversal logic, (2) Duplicate suggestions for the same error, (3) Handling of '[unintelligible]' suggestions from AI.",
+            "details": "**Issues Found During Testing:**\n\n1. **Marks Not Appearing:** The `applyGrammarMark` function has flawed traversal logic that stops after applying the first mark in a branch, causing subsequent marks to be skipped.\n\n2. **Duplicate Suggestions:** The retext library emits multiple messages for the same error from different internal rules, creating duplicate suggestions in the UI.\n\n3. **\"[unintelligible]\" Handling:** AI returns \"[unintelligible]\" as placeholder for nonsensical words, but UI treats it as valid suggestion.\n\n**Solutions:**\n\n1. **Rewrite applyGrammarMark function** with robust traversal algorithm\n2. **Add de-duplication step** in useHybridGrammarCheck hook\n3. **Handle unintelligible suggestions** by clearing proposed text and updating explanation\n\n**Code Changes:**\n- Fix traversal logic in `src/components/editor/GrammarPlugin.tsx`\n- Add suggestion filtering in `src/hooks/useHybridGrammarCheck.ts`\n- Update suggestion conversion logic for unintelligible cases",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 8,
+            "title": "Fix Editor Crashes and Missing Marks",
+            "description": "Fix critical editor crashes caused by improper node manipulation in applyGrammarMark function. The current implementation causes 'includeChildren should only be true for ElementNodes' and 'selection has been lost' errors.",
+            "details": "**Critical Issues:**\n\n1. **Editor Crashes:** The `applyGrammarMark` function attempts to replace TextNode with multiple nodes using `replace()`, which only accepts single nodes, causing \"includeChildren should only be true for ElementNodes\" error.\n\n2. **Selection Lost:** Failed transactions cause selection to be lost when editor tries to restore selection to removed nodes.\n\n3. **Missing Marks:** Grammar marks not appearing due to transaction failures.\n\n**Root Cause:** Improper use of Lexical's node manipulation API. Using `replace()` with multiple nodes on TextNode is invalid.\n\n**Solution:** Rewrite `applyGrammarMark` function to use Lexical's native `splitText()` method for safe node splitting and mark insertion.\n\n**Code Changes Required:**\n\nFile: `src/components/editor/GrammarPlugin.tsx`\n\nReplace the entire `applyGrammarMark` function with the corrected implementation using `splitText()` method.",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          },
+          {
+            "id": 9,
+            "title": "Fix Duplicate Suggestions and Unintelligible Handling",
+            "description": "Add deduplication logic to remove identical suggestions for the same text range and handle '[unintelligible]' suggestions by clearing the proposed change to prevent applying them.",
+            "details": "**Issues to Fix:**\n\n1. **Duplicate Suggestions:** The retext library emits multiple messages for the same error from different internal rules, creating duplicate suggestions in the UI (e.g., three identical suggestions for \"woah\").\n\n2. **Unintelligible Suggestions:** AI returns \"[unintelligible]\" as placeholder for nonsensical words, but UI treats it as valid suggestion that can be applied.\n\n**Solutions:**\n\n1. **Add Deduplication Logic:** Filter suggestions based on unique key combining position and proposed text.\n\n2. **Handle Unintelligible:** Detect \"[unintelligible]\" placeholder and clear proposed text to hide Apply button.\n\n**Code Changes Required:**\n\nFile: `src/hooks/useHybridGrammarCheck.ts`\n\n1. **Handle unintelligible suggestions in convertToEditorSuggestions:**\n```typescript\nlet finalProposed = suggestion.replacement || '';\n// Handle cases where the AI cannot determine a good suggestion\nif (finalProposed.toLowerCase().includes('[unintelligible]')) {\n  cleanExplanation = `Unknown word: \"${suggestion.flaggedText || suggestion.original}\".`;\n  finalProposed = ''; // Clear proposal so it cannot be applied\n}\n```\n\n2. **Add deduplication in performHybridGrammarCheck:**\n```typescript\n// De-duplicate suggestions based on range and proposal\nconst uniqueSuggestions = Array.from(\n  new Map(\n    editorSuggestions.map(s => [\n      `${s.range.start}-${s.range.end}-${s.proposed}`,\n      s,\n    ]),\n  ).values(),\n);\n```",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 27
+          }
+        ]
+      },
+      {
+        "id": 28,
+        "title": "Refactor GrammarPlugin to Use Lexical MarkNode Utilities",
+        "description": "Replace the custom text-splitting approach in GrammarPlugin with Lexical’s official MarkNode utilities to ensure precise and resilient grammar suggestion highlights.",
+        "details": "Revamp the current implementation of GrammarPlugin by eliminating its brittle, manual text node traversal and splitting logic. Instead, integrate Lexical’s official utilities (such as $wrapSelectionInMarkNode and $unwrapMarkNode) to apply marks accurately. Implement word-level marking for general grammar suggestions and sentence-level marking for passive voice (as identified in Task 10), ensuring that these marks remain synchronized amid editor mutations, node transformations, and user edits. Preserve existing hover and click interactions along with the CSS styling for highlights. Additionally, address edge cases like overlapping suggestions and ensure that marks are reliably cleared when suggestions are accepted or dismissed.",
+        "testStrategy": "Conduct thorough testing by simulating diverse text editing scenarios with both passive voice sentences and standard grammar errors. Verify that marks are applied correctly, remain in sync during rapid typing or node changes, and that hover/click interactions function as expected. Manually test edge cases, including overlapping marks and mark removal when suggestions are applied or dismissed. Use automated tests to simulate mutations and validate that Lexical utilities correctly manage marks under varied editing conditions.",
+        "status": "pending",
+        "dependencies": [
+          8,
+          10
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Refactor applyGrammarMark to use $wrapSelectionInMarkNode",
+            "description": "Replace manual text splitting logic with Lexical's $wrapSelectionInMarkNode to ensure accurate highlights.",
+            "details": "**Problem:** Current applyGrammarMark manually traverses nodes and splits text, leading to misaligned marks.\n\n**Solution:**\n1. Convert plain-text range (start,end) to Lexical selection using `editor.getEditorState().read()` and node/offset mapping helper.\n2. Within `editor.update()`, create a range selection, call `$wrapSelectionInMarkNode(selection,false,'grammar-mark',suggestion.type,suggestion.id)`.\n3. Remove custom splitting code.\n4. Ensure sentence-level selection for passive voice (expand selection to sentence boundaries before wrapping).\n\n**Testing:** Verify highlights align exactly with intended text across edits.",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 28
+          },
+          {
+            "id": 2,
+            "title": "Implement mark node transforms to maintain highlights",
+            "description": "Add TextNode transform to keep grammar marks updated when text edits occur.",
+            "details": "**Problem:** Marks may drift when users edit text inside marked regions.\n\n**Solution:**\n1. Register `editor.registerNodeTransform(TextNode, ...)` in GrammarPlugin.\n2. On text changes, check surrounding nodes for existing GrammarMarkNodes; if marks' range no longer valid or broken word, unwrap or adjust.\n3. Re-run grammar suggestions asynchronously after debounce to reapply accurate marks.\n\n**Testing:** Edit words within marked sentences; ensure highlights adjust or disappear gracefully.",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 28
+          },
+          {
+            "id": 3,
+            "title": "Enhance removal logic using $unwrapMarkNode",
+            "description": "Use built-in $unwrapMarkNode to remove marks when suggestions resolved.",
+            "details": "Replace custom removeGrammarMark with traversal that finds GrammarMarkNode by suggestionId and calls $unwrapMarkNode for accurate removal without manual text mutation.",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 28
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-23T00:14:01.191Z",
+      "updated": "2025-06-23T06:59:26.041Z",
       "description": "Tasks for master context"
     }
   }

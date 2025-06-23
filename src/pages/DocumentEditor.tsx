@@ -19,6 +19,7 @@ const DocumentEditor: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthContext();
   const editorRef = useRef<LexicalEditorRef>(null);
+  const contentRef = useRef(''); // Ref to hold the latest content string
   const isApplyingSuggestion = useRef(false);
   const isApplyingMarks = useRef(false);
   const [document, setDocument] = useState<Document | null>(null);
@@ -71,39 +72,45 @@ const DocumentEditor: React.FC = () => {
 
     // Handle applying a suggestion
   const handleApplySuggestion = useCallback((suggestion: EditorSuggestion) => {
+    // Prevent concurrent applications to avoid race conditions
+    if (isApplyingSuggestion.current) {
+      console.warn('Skipping suggestion application, already in progress.');
+      return;
+    }
+
+    isApplyingSuggestion.current = true;
     console.log('🔧 HYBRID APPLY DEBUG: Starting suggestion application', {
       suggestionId: suggestion.id,
       original: suggestion.original,
       proposed: suggestion.proposed,
-      currentContentLength: editorState.content.length,
+      currentContentLength: contentRef.current.length,
       timestamp: new Date().toISOString()
     });
 
     try {
-      const result = applySuggestion(suggestion.id, editorState.content);
+      // Use contentRef.current to ensure we have the latest text
+      const result = applySuggestion(suggestion.id, contentRef.current);
 
       if (result && editorRef.current) {
         console.log('🔧 HYBRID APPLY DEBUG: Suggestion applied successfully', {
-          oldTextLength: editorState.content.length,
+          oldTextLength: contentRef.current.length,
           newTextLength: result.newText.length,
-          textChanged: result.newText !== editorState.content
+          textChanged: result.newText !== contentRef.current
         });
-
-        // Set flag to prevent grammar checking during programmatic update
-        isApplyingSuggestion.current = true;
 
         // Update the actual Lexical editor content
         editorRef.current.updateContent(result.newText);
 
-        // Update the editor state
-        setEditorState(prev => ({
-          ...prev,
+        // Update the editor state and content ref
+        const newStateData = {
           content: result.newText,
           html: result.newText,
           wordCount: result.newText.trim().split(/\s+/).filter(Boolean).length,
           characterCount: result.newText.length,
           isEmpty: result.newText.trim().length === 0,
-        }));
+        };
+        setEditorState(newStateData);
+        contentRef.current = result.newText;
 
         // Mark as having unsaved changes
         setHasUnsavedChanges(true);
@@ -127,13 +134,13 @@ const DocumentEditor: React.FC = () => {
           hasResult: !!result,
           hasEditorRef: !!editorRef.current
         });
+        isApplyingSuggestion.current = false;
       }
     } catch (error) {
       console.error('🚨 HYBRID APPLY DEBUG: Error in handleApplySuggestion:', error);
-      // Reset flag in case of error
       isApplyingSuggestion.current = false;
     }
-  }, [applySuggestion, editorState.content, checkGrammar, clearSuggestions]);
+  }, [applySuggestion, checkGrammar, clearSuggestions]);
 
   // Handle refining a suggestion with GPT-4o (for sidebar - takes EditorSuggestion object)
   const handleRefineSuggestion = useCallback(async (suggestion: EditorSuggestion) => {
@@ -316,6 +323,9 @@ const DocumentEditor: React.FC = () => {
           isEmpty: !content || content.trim().length === 0,
         });
 
+        // Initialize contentRef with the loaded content
+        contentRef.current = content;
+
         // Clear suggestions and reset grammar check cache when loading document
         clearSuggestions();
 
@@ -352,6 +362,9 @@ const DocumentEditor: React.FC = () => {
     });
 
     setEditorState(stateData);
+
+    // Update content ref to have the latest text available for handlers
+    contentRef.current = stateData.content;
 
     // Only set hasUnsavedChanges if content actually differs from saved document
     const contentChanged = stateData.content !== (document?.content || '');
@@ -391,6 +404,15 @@ const DocumentEditor: React.FC = () => {
     if (!document || !user || saving) return;
 
     const dataToSave = stateData || editorState;
+
+    // Only save if content has actually changed. This prevents infinite save loops.
+    if (dataToSave.content === document.content) {
+      if (hasUnsavedChanges) {
+        // If UI thinks there are changes, but content is identical, correct the UI state.
+        setHasUnsavedChanges(false);
+      }
+      return; // No need to save.
+    }
 
     console.log('🔧 SAVE STATE DEBUG: saveDocument called', {
       contentToSave: dataToSave.content,

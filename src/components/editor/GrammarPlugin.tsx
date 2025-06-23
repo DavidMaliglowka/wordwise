@@ -40,6 +40,9 @@ export function GrammarPlugin({
     onMarkApplicationStart?.();
 
     editor.update(() => {
+      const selection = $getSelection()?.clone();
+      const rootElement = editor.getRootElement();
+      const isFocused = rootElement && document.activeElement && rootElement.contains(document.activeElement);
       console.log('🔄 Starting mark application cycle');
 
       // Always clear existing marks first
@@ -54,8 +57,14 @@ export function GrammarPlugin({
         });
       }
 
+      // Restore selection if the editor was focused to prevent cursor jumping
+      if (isFocused && selection) {
+        $setSelection(selection);
+      }
+
       console.log('✅ Mark application cycle complete');
     }, {
+      tag: 'history-merge', // Merge with previous history state to help with undo
       onUpdate: () => {
         // Reset flag after update is complete
         setTimeout(() => {
@@ -180,7 +189,7 @@ function clearAllGrammarMarks(): void {
         // Fallback to just removing the node if unwrapping fails
         node.remove();
       }
-      return;
+      // Do not return; continue traversal to siblings.
     }
 
     // Only traverse if the node has children
