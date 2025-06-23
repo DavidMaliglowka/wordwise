@@ -7,7 +7,7 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-import { onRequest } from "firebase-functions/v2/https";
+import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { defineSecret } from 'firebase-functions/params';
 import * as admin from "firebase-admin";
@@ -760,32 +760,23 @@ const passiveVoiceEnhancementSchema = z.object({
 
 /**
  * Enhance passive voice sentences with active voice alternatives
- * POST /enhancePassiveVoice
+ * Firebase Callable Function
  */
-export const enhancePassiveVoice = onRequest({
-  invoker: 'public',
+export const enhancePassiveVoice = onCall({
   secrets: [openaiApiKey]
-}, async (req, res) => {
+}, async (request: any) => {
   try {
-    setCorsHeaders(res, req);
-
-    // Handle preflight OPTIONS request
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-
-    if (req.method !== "POST") {
-      return sendError(res, 405, "Method not allowed", null, req);
-    }
-
     // Verify authentication
-    const uid = await verifyAuth(req);
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'User must be authenticated');
+    }
 
-    // Validate request body
-    const validationResult = passiveVoiceEnhancementSchema.safeParse(req.body);
+    const uid = request.auth.uid;
+
+    // Validate request data
+    const validationResult = passiveVoiceEnhancementSchema.safeParse(request.data);
     if (!validationResult.success) {
-      return sendError(res, 400, "Invalid request data", validationResult.error.errors, req);
+      throw new HttpsError('invalid-argument', 'Invalid request data', validationResult.error.errors);
     }
 
     const { sentences } = validationResult.data;
@@ -835,29 +826,27 @@ export const enhancePassiveVoice = onRequest({
         processingTimeMs: response.processingTimeMs
       });
 
-      res.status(200).json({
+      return {
         success: true,
         data: response
-      });
+      };
 
     } catch (error: any) {
       logger.error('Passive voice enhancement failed:', error);
 
       // Handle specific OpenAI errors
       if (error.message.includes('authentication failed')) {
-        return sendError(res, 401, "AI service authentication failed", null, req);
+        throw new HttpsError('unauthenticated', 'AI service authentication failed');
       } else if (error.message.includes('rate limit')) {
-        return sendError(res, 429, "AI service rate limit exceeded", null, req);
+        throw new HttpsError('resource-exhausted', 'AI service rate limit exceeded');
       }
 
-      return sendError(res, 500, "Passive voice enhancement failed", error.message, req);
+      throw new HttpsError('internal', 'Passive voice enhancement failed', error.message);
     }
 
   } catch (error: any) {
-    if (error.message === "UNAUTHORIZED") {
-      return sendError(res, 401, "Unauthorized", null, req);
-    }
-    return sendError(res, 500, "Internal server error", error.message, req);
+    logger.error('Passive voice enhancement error:', error);
+    throw new HttpsError('internal', 'Internal server error', error.message);
   }
 });
 

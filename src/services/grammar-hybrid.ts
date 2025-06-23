@@ -638,12 +638,16 @@ export class HybridGrammarService {
         const rewrittenSentences = response.data.sentences.map((sentenceData: any, index: number) => {
           const originalSentence = sentences[index]?.text || '';
 
-          // Look for the best passive voice suggestion
+          // Cloud Function suggestions may use either `replacement` or `proposed`
           const bestSuggestion = sentenceData.suggestions?.find((s: any) =>
-            s.type === 'passive' && s.replacement && s.replacement !== originalSentence
+            s.type === 'passive' && (
+              (s.replacement && s.replacement !== originalSentence) ||
+              (s.proposed && s.proposed !== originalSentence)
+            )
           );
 
-          const rewrittenSentence = bestSuggestion?.replacement || originalSentence;
+          const rewrittenSentence =
+            bestSuggestion?.replacement || bestSuggestion?.proposed || originalSentence;
 
           console.log(`🔄 CLOUD DEBUG: Sentence ${index} rewrite result:`, {
             original: originalSentence,
@@ -666,6 +670,80 @@ export class HybridGrammarService {
       console.error('❌ CLOUD DEBUG: Error calling enhancePassiveVoice function:', error);
       // Return original sentences as fallback
       return sentences.map(s => s.text);
+    }
+  }
+
+  /**
+   * Lightweight refinement method for individual suggestions using Cloud Function
+   */
+  async refineSuggestion(
+    suggestion: ClientSuggestion,
+    context: string
+  ): Promise<ClientSuggestion | null> {
+    if (!suggestion.canRegenerate || (suggestion.type !== 'passive' && suggestion.type !== 'style')) {
+      console.warn('🚫 REFINE DEBUG: Suggestion cannot be refined', {
+        type: suggestion.type,
+        canRegenerate: suggestion.canRegenerate
+      });
+      return null;
+    }
+
+    console.log('🔄 REFINE DEBUG: Starting lightweight refinement', {
+      suggestionId: suggestion.id,
+      type: suggestion.type,
+      flaggedText: suggestion.flaggedText
+    });
+
+    try {
+      // Extract the sentence containing the suggestion
+      const sentenceBoundaries = this.findSentenceBoundaries(context);
+      const containingSentence = this.findContainingSentence(
+        suggestion.range,
+        sentenceBoundaries,
+        context
+      );
+
+      if (!containingSentence) {
+        console.warn('⚠️ REFINE DEBUG: Could not find containing sentence');
+        return null;
+      }
+
+      console.log('🎯 REFINE DEBUG: Found containing sentence', {
+        sentence: containingSentence.text,
+        range: containingSentence.range
+      });
+
+      // Call the Cloud Function for refinement
+      const rewrittenSentences = await this.callPassiveVoiceRewriteFunction([containingSentence]);
+
+      if (rewrittenSentences.length === 0 || rewrittenSentences[0] === containingSentence.text) {
+        console.warn('⚠️ REFINE DEBUG: No improvement from Cloud Function');
+        return null;
+      }
+
+      const rewrittenSentence = rewrittenSentences[0];
+
+      console.log('✨ REFINE DEBUG: Successfully refined suggestion', {
+        original: containingSentence.text,
+        rewritten: rewrittenSentence
+      });
+
+      // Create a new suggestion with the refined content
+      return {
+        ...suggestion,
+        id: `refined_${suggestion.id}_${Date.now()}`,
+        message: `Improved sentence structure. Consider this active voice alternative.`,
+        replacement: rewrittenSentence,
+        range: containingSentence.range,
+        confidence: 90,
+        flaggedText: containingSentence.text,
+        canRegenerate: true,
+        regenerateId: `refined_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
+
+    } catch (error) {
+      console.error('❌ REFINE DEBUG: Refinement failed:', error);
+      return null;
     }
   }
 

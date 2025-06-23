@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getRoot, $getSelection, $isRangeSelection, $createTextNode } from 'lexical';
+import { $getRoot, $getSelection, $setSelection, $isRangeSelection, $createTextNode } from 'lexical';
 import { $createGrammarMarkNode, $isGrammarMarkNode, $removeGrammarMark } from './GrammarMarkNode';
 import { EditorSuggestion } from '../../types/grammar';
 

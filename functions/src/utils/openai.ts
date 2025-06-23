@@ -133,19 +133,34 @@ function createSystemPrompt(
   if (enhancePassiveVoice) {
     prompt += `
 
-PASSIVE VOICE ENHANCEMENT (PRIORITY):
-- Detect passive voice constructions (forms of "to be" + past participle)
-- Provide active voice alternatives for entire sentences
+PASSIVE VOICE ENHANCEMENT (CRITICAL PRIORITY - ALWAYS SUGGEST WHEN FOUND):
+- AGGRESSIVELY detect ALL passive voice constructions
+- Look for these patterns: was/were/is/are/been/being + past participle
+- ALWAYS provide active voice alternatives - never skip passive voice
 - Mark the ENTIRE sentence containing passive voice, not just the passive phrase
+- Be VERY liberal in detecting passive voice - when in doubt, suggest active voice
 - For passive voice suggestions:
-  * Type: "passive"
+  * Type: "passive" (REQUIRED)
   * Original: entire sentence with passive voice
-  * Suggested: complete sentence rewritten in active voice
-  * Range: start and end of the entire sentence
-- Examples:
-  * "The report was written by the team." → "The team wrote the report."
-  * "Mistakes were made during the process." → "We made mistakes during the process."
-  * "The decision will be announced tomorrow." → "We will announce the decision tomorrow."
+  * Suggested: complete sentence rewritten in active voice with clear subject
+  * Range: start and end of the entire sentence including punctuation
+  * Confidence: 0.9 or higher
+  * Explanation: "Convert passive voice to active voice for clarity and directness"
+
+MANDATORY EXAMPLES TO ALWAYS CONVERT:
+- "The ball was thrown by John." → "John threw the ball."
+- "The report was written by the team." → "The team wrote the report."
+- "The decision was made by the committee." → "The committee made the decision."
+- "Mistakes were made during the process." → "We made mistakes during the process."
+- "The decision will be announced tomorrow." → "We will announce the decision tomorrow."
+- "The book was read by many students." → "Many students read the book."
+- "The project was completed last week." → "The team completed the project last week."
+
+CRITICAL RULES:
+- If you find ANY form of "to be" + past participle, ALWAYS suggest active voice
+- Never ignore passive voice - it should ALWAYS be flagged and converted
+- Add appropriate subjects when missing (use "we", "the team", "someone", etc.)
+- Be confident (0.9+ confidence) - passive to active conversion is always beneficial
 
 `;
   }
