@@ -228,6 +228,14 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
     return;
   }
 
+  // Get the exact text at the specified range for verification
+  const rangeText = textContent.substring(suggestion.range.start, suggestion.range.end);
+  console.log(`📝 MARK DEBUG: Range text verification:`, {
+    rangeText,
+    originalText: suggestion.original,
+    matches: rangeText === suggestion.original
+  });
+
   // Enhanced approach: For passive voice, mark the entire sentence
   const isPassiveVoice = suggestion.type === 'passive';
   const targetText = isPassiveVoice ?
@@ -239,30 +247,50 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
     isPassiveVoice
   });
 
-  // Simple approach: Find the first text node that contains our target text
-  function findAndMarkText(node: any): boolean {
+  // ENHANCED: Position-based marking instead of text-based searching
+  function findAndMarkTextByPosition(node: any, currentPosition: number = 0): { found: boolean; newPosition: number } {
     if (node.getType && node.getType() === 'text') {
       const nodeText = node.getTextContent();
+      const nodeLength = nodeText.length;
+      const nodeStart = currentPosition;
+      const nodeEnd = currentPosition + nodeLength;
 
-      console.log(`🔍 MARK DEBUG: Checking text node:`, {
+      console.log(`🔍 MARK DEBUG: Checking text node by position:`, {
         nodeText: nodeText.substring(0, 50) + (nodeText.length > 50 ? '...' : ''),
-        targetText,
-        nodeLength: nodeText.length
+        nodeStart,
+        nodeEnd,
+        targetStart: suggestion.range.start,
+        targetEnd: suggestion.range.end,
+        nodeLength
       });
 
-      // Simple text matching for now - look for the exact original text
-      const textIndex = nodeText.indexOf(targetText);
-      if (textIndex !== -1) {
-        console.log(`🎯 MARK DEBUG: Found target text at index ${textIndex}`);
+      // Check if our target range overlaps with this text node
+      const targetStart = suggestion.range.start;
+      const targetEnd = suggestion.range.end;
+
+      // Does the suggestion range overlap with this text node?
+      if (targetStart < nodeEnd && targetEnd > nodeStart) {
+        console.log(`🎯 MARK DEBUG: Found overlapping text node`);
 
         try {
-          // Split the text node at the start and end of our target
-          const beforeText = nodeText.substring(0, textIndex);
-          const afterText = nodeText.substring(textIndex + targetText.length);
+          // Calculate the relative positions within this node
+          const relativeStart = Math.max(0, targetStart - nodeStart);
+          const relativeEnd = Math.min(nodeLength, targetEnd - nodeStart);
 
-          console.log(`✂️ MARK DEBUG: Splitting text:`, {
+          console.log(`📍 MARK DEBUG: Relative positions:`, {
+            relativeStart,
+            relativeEnd,
+            textToMark: nodeText.substring(relativeStart, relativeEnd)
+          });
+
+          // Split the text node at the start and end of our target
+          const beforeText = nodeText.substring(0, relativeStart);
+          const markedText = nodeText.substring(relativeStart, relativeEnd);
+          const afterText = nodeText.substring(relativeEnd);
+
+          console.log(`✂️ MARK DEBUG: Splitting text by position:`, {
             beforeText: beforeText.substring(Math.max(0, beforeText.length - 20)),
-            targetText,
+            markedText,
             afterText: afterText.substring(0, 20)
           });
 
@@ -274,7 +302,7 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
           );
 
           // Create a text node for the marked content
-          const markedTextNode = $createTextNode(targetText);
+          const markedTextNode = $createTextNode(markedText);
           markNode.append(markedTextNode);
 
           // Replace the original node with our new structure
@@ -298,36 +326,46 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
             node.replace(markNode);
           }
 
-          console.log(`✅ MARK DEBUG: Successfully applied mark for "${targetText}"`);
-          return true;
+          console.log(`✅ MARK DEBUG: Successfully applied position-based mark for "${markedText}"`);
+          return { found: true, newPosition: currentPosition + nodeLength };
         } catch (error) {
-          console.error(`🚨 MARK DEBUG: Error applying mark for "${targetText}":`, error);
-          return false;
+          console.error(`🚨 MARK DEBUG: Error applying position-based mark:`, error);
+          return { found: false, newPosition: currentPosition + nodeLength };
         }
       }
+
+      return { found: false, newPosition: currentPosition + nodeLength };
     }
 
     // Recursively check children if the node has them
     if (node.getChildren && typeof node.getChildren === 'function') {
       try {
         const children = [...node.getChildren()]; // Create copy to avoid modification issues
+        let position = currentPosition;
+
         for (const child of children) {
-          if (findAndMarkText(child)) {
-            return true; // Stop after first match
+          const result = findAndMarkTextByPosition(child, position);
+          if (result.found) {
+            return result; // Stop after first match
           }
+          position = result.newPosition;
         }
+
+        return { found: false, newPosition: position };
       } catch (error) {
         console.error('🚨 MARK DEBUG: Error traversing children:', error);
+        return { found: false, newPosition: currentPosition };
       }
     }
 
-    return false;
+    return { found: false, newPosition: currentPosition };
   }
 
-  const success = findAndMarkText(root);
-  console.log(`📝 MARK DEBUG: Mark application result for "${suggestion.original}":`, {
-    success,
-    suggestionId: suggestion.id
+  const result = findAndMarkTextByPosition(root, 0);
+  console.log(`📝 MARK DEBUG: Position-based mark application result for "${suggestion.original}":`, {
+    success: result.found,
+    suggestionId: suggestion.id,
+    range: suggestion.range
   });
 }
 

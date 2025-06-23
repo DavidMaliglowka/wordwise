@@ -111,6 +111,32 @@ async function getUserPersonalDictionary(uid: string): Promise<string[]> {
 }
 
 /**
+ * Normalize apostrophes and quotes in text
+ */
+function normalizeApostrophes(text: string): string {
+  return text
+    .replace(/['']/g, "'") // Convert smart quotes to straight apostrophes
+    .replace(/[""]/g, '"') // Convert smart quotes to straight quotes
+    .replace(/[–—]/g, '-'); // Convert em/en dashes to hyphens
+}
+
+/**
+ * Extract base word from possessive or contracted forms
+ */
+function extractBaseWord(word: string): string {
+  const normalized = normalizeApostrophes(word.toLowerCase().trim());
+
+  // Handle possessives: "word's" -> "word"
+  if (normalized.endsWith("'s") || normalized.endsWith("'")) {
+    return normalized.replace(/'s?$/, '');
+  }
+
+  // Handle contractions: "don't" -> ["don", "t"], "we'll" -> ["we", "ll"]
+  // For now, just return the original word for contractions
+  return normalized;
+}
+
+/**
  * Filter suggestions based on user's personal dictionary
  */
 function filterSuggestionsWithPersonalDictionary(suggestions: any[], personalDictionary: string[]): any[] {
@@ -118,8 +144,8 @@ function filterSuggestionsWithPersonalDictionary(suggestions: any[], personalDic
     return suggestions;
   }
 
-  // Create a Set for faster lookups
-  const dictionarySet = new Set(personalDictionary.map(word => word.toLowerCase()));
+  // Create a Set for faster lookups with normalized words
+  const dictionarySet = new Set(personalDictionary.map(word => normalizeApostrophes(word.toLowerCase())));
 
   return suggestions.filter(suggestion => {
     // Extract the flagged word from the suggestion
@@ -135,9 +161,15 @@ function filterSuggestionsWithPersonalDictionary(suggestions: any[], personalDic
       }
     }
 
-    if (flaggedWord && dictionarySet.has(flaggedWord)) {
-      logger.info(`Filtered suggestion for personal dictionary word: "${flaggedWord}"`);
-      return false; // Filter out this suggestion
+    if (flaggedWord) {
+      const normalizedFlagged = normalizeApostrophes(flaggedWord);
+      const baseFlagged = extractBaseWord(flaggedWord);
+
+      // Check both the full word and the base word
+      if (dictionarySet.has(normalizedFlagged) || dictionarySet.has(baseFlagged)) {
+        logger.info(`Filtered suggestion for personal dictionary word: "${flaggedWord}" (normalized: "${normalizedFlagged}", base: "${baseFlagged}")`);
+        return false; // Filter out this suggestion
+      }
     }
 
     return true; // Keep this suggestion

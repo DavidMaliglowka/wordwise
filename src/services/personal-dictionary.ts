@@ -216,9 +216,35 @@ class PersonalDictionaryService {
     });
   }
 
-  // Check if a word exists in the personal dictionary (instant lookup)
+  // Normalize apostrophes and quotes in text
+  private normalizeApostrophes(text: string): string {
+    return text
+      .replace(/['']/g, "'") // Convert smart quotes to straight apostrophes
+      .replace(/[""]/g, '"') // Convert smart quotes to straight quotes
+      .replace(/[–—]/g, '-'); // Convert em/en dashes to hyphens
+  }
+
+  // Extract base word from possessive or contracted forms
+  private extractBaseWord(word: string): string {
+    const normalized = this.normalizeApostrophes(word.toLowerCase().trim());
+
+    // Handle possessives: "word's" -> "word"
+    if (normalized.endsWith("'s") || normalized.endsWith("'")) {
+      return normalized.replace(/'s?$/, '');
+    }
+
+    // Handle contractions: "don't" -> ["don", "t"], "we'll" -> ["we", "ll"]
+    // For now, just return the original word for contractions
+    return normalized;
+  }
+
+  // Check if a word exists in the personal dictionary (instant lookup, handles apostrophes)
   hasWord(word: string): boolean {
-    return this.cache.has(word.toLowerCase());
+    const normalizedWord = this.normalizeApostrophes(word.toLowerCase().trim());
+    const baseWord = this.extractBaseWord(word);
+
+    // Check both the full word and the base word
+    return this.cache.has(normalizedWord) || this.cache.has(baseWord);
   }
 
   // Add a word locally to IndexedDB
@@ -252,7 +278,8 @@ class PersonalDictionaryService {
   ): Promise<PersonalDictionaryEntry> {
     await this.initialize();
 
-    const normalizedWord = word.toLowerCase().trim();
+    // Normalize apostrophes and convert to lowercase
+    const normalizedWord = this.normalizeApostrophes(word.toLowerCase().trim());
 
     if (!normalizedWord) {
       throw new Error('Word cannot be empty');

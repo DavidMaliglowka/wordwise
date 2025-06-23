@@ -196,6 +196,15 @@ const DocumentsDashboard: React.FC = () => {
         // Use smaller batch size in development for easier testing
         const batchSize = process.env.NODE_ENV === 'development' ? 8 : 20;
         const documents = await DocumentService.getDocuments();
+
+        console.log('📄 FETCH DEBUG: Documents fetched from API:', {
+          documentsCount: documents?.length || 0,
+          firstDocumentId: documents?.[0]?.id,
+          firstDocumentIdType: typeof documents?.[0]?.id,
+          allDocumentIds: documents?.map(d => ({ id: d.id, type: typeof d.id, title: d.title })),
+          timestamp: new Date().toISOString()
+        });
+
         setDocuments(documents);
         // Note: The documents service doesn't support pagination yet, so we'll set hasMore to false
         setHasMore(false);
@@ -429,6 +438,13 @@ const DocumentsDashboard: React.FC = () => {
   };
 
   const handleDocumentClick = (document: Document) => {
+    console.log('🖱️ CLICK DEBUG: handleDocumentClick called with:', {
+      documentId: document.id,
+      documentIdType: typeof document.id,
+      documentTitle: document.title,
+      fullDocument: document,
+      timestamp: new Date().toISOString()
+    });
     navigate(`/editor/${document.id}`);
   };
 

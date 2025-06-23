@@ -118,7 +118,7 @@ const GrammarSidebar: React.FC<GrammarSidebarProps> = ({
             <button
               onClick={() => onAddToDictionary(suggestion.original)}
               className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-              title="Add word to personal dictionary"
+              title={`Add "${suggestion.original}" to your personal dictionary`}
             >
               <span className="text-xs">📚</span>
             </button>

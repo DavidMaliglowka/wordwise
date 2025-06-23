@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { LexicalEditor, EditorStateData, LexicalEditorRef } from '../components/editor';
 import GrammarSidebar from '../components/editor/GrammarSidebar';
 import { FirestoreService } from '../services/firestore';
+import { DocumentService } from '../services/documents';
 import { useAuthContext } from '../contexts/AuthContext';
 import { useHybridGrammarCheck } from '../hooks/useHybridGrammarCheck';
 import { Document } from '../types/firestore';
@@ -231,7 +232,17 @@ const DocumentEditor: React.FC = () => {
   // Load document on mount
   useEffect(() => {
     const loadDocument = async () => {
-      if (!id || !user) return;
+      console.log('🔍 LOAD DEBUG: loadDocument called with:', {
+        id,
+        idType: typeof id,
+        user: user?.uid,
+        timestamp: new Date().toISOString()
+      });
+
+      if (!id || !user) {
+        console.log('❌ LOAD DEBUG: Early return - missing id or user:', { id, hasUser: !!user });
+        return;
+      }
 
       try {
         setLoading(true);
@@ -251,9 +262,26 @@ const DocumentEditor: React.FC = () => {
           return;
         }
 
-        const docData = await FirestoreService.Document.getDocument(id);
+        // Try to load document from Cloud Functions API first (for newer documents)
+        let docData: Document | null = null;
+        try {
+          console.log('📡 Trying to load document from Cloud Functions API...');
+          docData = await DocumentService.getDocument(id);
+          console.log('✅ Successfully loaded document from Cloud Functions API');
+        } catch (error) {
+          console.log('⚠️ Failed to load document from Cloud Functions API, trying direct Firestore access:', error);
+
+          // Fallback to direct Firestore access (for older documents)
+          try {
+            docData = await FirestoreService.Document.getDocument(id);
+            console.log('✅ Successfully loaded document from direct Firestore access');
+          } catch (firestoreError) {
+            console.error('❌ Failed to load document from both services:', firestoreError);
+          }
+        }
+
         if (!docData) {
-          console.error('Document not found');
+          console.error('Document not found in either service');
           navigate('/dashboard');
           return;
         }
