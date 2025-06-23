@@ -29,6 +29,7 @@ const DEFAULT_OPTIONS: Required<GrammarCheckOptions> = {
   includeStyle: false,
   enableCache: true,
   enhancePassiveVoice: false,
+  enhanceSpelling: false, // Legacy hook doesn't use smart spelling refinement
 };
 
 export function useGrammarCheck(options: Partial<GrammarCheckOptions> = {}): UseGrammarCheckResult {
