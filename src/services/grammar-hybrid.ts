@@ -72,6 +72,7 @@ export class GrammarDecisionEngine {
     includeStyle?: boolean;
     priority?: 'fast' | 'quality' | 'balanced';
     userTier?: 'free' | 'premium';
+    enhancePassiveVoice?: boolean;
   } = {}): ProcessingDecision {
     const wordCount = text.split(/\s+/).length;
     const charCount = text.length;
@@ -119,9 +120,17 @@ export class GrammarDecisionEngine {
       };
     }
 
-    // For style analysis or quality priority, consider GPT
-    if (options.includeStyle || options.priority === 'quality') {
-      reasons.push('Style analysis or quality priority requested');
+    // For passive voice enhancement, style analysis, or quality priority, use hybrid mode
+    if (options.enhancePassiveVoice || options.includeStyle || options.priority === 'quality') {
+      if (options.enhancePassiveVoice) {
+        reasons.push('Passive voice enhancement requested');
+      }
+      if (options.includeStyle) {
+        reasons.push('Style analysis requested');
+      }
+      if (options.priority === 'quality') {
+        reasons.push('Quality priority requested');
+      }
       return {
         useClientOnly: false,
         reason: reasons.join('; '),
@@ -264,21 +273,10 @@ export class ClientGrammarEngine {
   private async getProcessor() {
     if (this.processor) return this.processor;
 
-    console.log('🔧 Initializing grammar processor...');
-
     try {
-      console.log('📚 Loading Hunspell dictionary...');
       this.dict = await getHunspellDict();
-      console.log('✅ Dictionary loaded successfully:', {
-        affSize: this.dict.aff.length,
-        dicSize: this.dict.dic.length
-      });
-
-      console.log('🔤 Creating spell checker...');
       this.spellChecker = await import('nspell').then(m => m.default(this.dict));
-      console.log('✅ Spell checker created');
 
-      console.log('⚙️ Setting up retext processor...');
       this.processor = unified()
         .use(retextEnglish)
         .use(retextSpell, this.dict as any) // Cast to avoid TypeScript error
@@ -291,7 +289,7 @@ export class ClientGrammarEngine {
         // Note: retext-usage removed due to internal errors (deprecated package)
         .use(retextStringify);
 
-      console.log('✅ Retext processor configured');
+      console.log('✅ Grammar processor initialized');
       return this.processor;
     } catch (error) {
       console.error('❌ Failed to initialize grammar processor:', error);
@@ -323,25 +321,13 @@ export class ClientGrammarEngine {
     const normalizedText = unorm.nfc(text);
     const positionMapper = new UnicodePositionMapper(normalizedText);
 
-    console.log(`🔍 Analyzing text: "${text}" (normalized: "${normalizedText}")`);
-
     try {
       const processor = await this.getProcessor();
       const file = await processor.process(normalizedText);
 
-      console.log(`📝 Retext processing complete. Messages found: ${file.messages.length}`);
-
+      // Only log if there are messages to avoid spam
       if (file.messages.length > 0) {
-        console.log('Raw retext messages:', file.messages.map((m: any) => ({
-          source: m.source,
-          message: m.message || m.reason,
-          ruleId: m.ruleId,
-          place: m.place,
-          location: m.location,
-          position: m.position,
-          expected: m.expected,
-          actual: m.actual
-        })));
+        console.log(`📝 Found ${file.messages.length} grammar suggestions`);
       }
 
       const suggestions = file.messages.map((message: any) => {
@@ -413,16 +399,11 @@ export class ClientGrammarEngine {
           flaggedText // Include the flagged text for personal dictionary filtering
         };
 
-        console.log(`💡 Created suggestion:`, suggestion);
         return suggestion;
       });
 
-      console.log(`✅ Generated ${suggestions.length} suggestions before filtering`);
-
       // Filter out suggestions for words in the personal dictionary
       const filteredSuggestions = await this.filterPersonalDictionaryWords(suggestions);
-
-      console.log(`🔄 After personal dictionary filtering: ${filteredSuggestions.length} suggestions`);
 
       return filteredSuggestions;
 
@@ -453,7 +434,6 @@ export class ClientGrammarEngine {
       // Check if the flagged word is in the personal dictionary
       const flaggedWord = (suggestion as any).flaggedText || '';
       if (personalDictionary.hasWord(flaggedWord)) {
-        console.log(`Filtered out personal dictionary word: "${flaggedWord}"`);
         return false;
       }
 
@@ -632,29 +612,58 @@ export class HybridGrammarService {
     const { httpsCallable } = await import('firebase/functions');
 
     try {
-      // Call the existing checkGrammar function with a special flag for passive voice enhancement
-      const checkGrammar = httpsCallable(functions, 'checkGrammar');
+      // Call the dedicated enhancePassiveVoice Cloud Function
+      const enhancePassiveVoice = httpsCallable(functions, 'enhancePassiveVoice');
 
-      const promises = sentences.map(async (sentence) => {
-        const result = await checkGrammar({
-          text: sentence.text,
-          includeStyle: true,
-          includeGrammar: true,
-          enhancePassiveVoice: true // Special flag for passive voice enhancement
-        });
-
-        // Extract the rewritten sentence from the response
-        // This assumes the Cloud Function returns enhanced passive voice suggestions
-        const response = result.data as any;
-        const passiveSuggestion = response.suggestions?.find((s: any) => s.type === 'passive');
-
-        return passiveSuggestion?.replacement || sentence.text;
+      console.log(`🌐 CLOUD DEBUG: Calling enhancePassiveVoice Cloud Function:`, {
+        sentenceCount: sentences.length,
+        sentences: sentences.map(s => s.text)
       });
 
-      return await Promise.all(promises);
+      const result = await enhancePassiveVoice({
+        sentences: sentences.map(s => s.text),
+        language: 'en'
+      });
+
+      // Extract the rewritten sentences from the response
+      const response = result.data as any;
+      console.log(`📨 CLOUD DEBUG: Received response from enhancePassiveVoice:`, {
+        success: response.success,
+        totalSentences: response.data?.totalSentences || 0,
+        passiveSentencesFound: response.data?.passiveSentencesFound || 0,
+        processingTimeMs: response.data?.processingTimeMs || 0
+      });
+
+      if (response.success && response.data?.sentences) {
+        const rewrittenSentences = response.data.sentences.map((sentenceData: any, index: number) => {
+          const originalSentence = sentences[index]?.text || '';
+
+          // Look for the best passive voice suggestion
+          const bestSuggestion = sentenceData.suggestions?.find((s: any) =>
+            s.type === 'passive' && s.replacement && s.replacement !== originalSentence
+          );
+
+          const rewrittenSentence = bestSuggestion?.replacement || originalSentence;
+
+          console.log(`🔄 CLOUD DEBUG: Sentence ${index} rewrite result:`, {
+            original: originalSentence,
+            rewritten: rewrittenSentence,
+            hasSuggestions: sentenceData.suggestions?.length || 0,
+            hasPassiveVoice: sentenceData.hasPassiveVoice,
+            isChanged: rewrittenSentence !== originalSentence
+          });
+
+          return rewrittenSentence;
+        });
+
+        return rewrittenSentences;
+      } else {
+        console.warn('⚠️ CLOUD DEBUG: enhancePassiveVoice returned unsuccessful response');
+        return sentences.map(s => s.text);
+      }
 
     } catch (error) {
-      console.error('Error calling passive voice rewrite function:', error);
+      console.error('❌ CLOUD DEBUG: Error calling enhancePassiveVoice function:', error);
       // Return original sentences as fallback
       return sentences.map(s => s.text);
     }
@@ -711,6 +720,15 @@ export class HybridGrammarService {
 
     // Make processing decision
     const decision = GrammarDecisionEngine.analyzeProcessingNeeds(text, options);
+
+    console.log('🤖 DECISION DEBUG: Processing decision made', {
+      enhancePassiveVoice: options.enhancePassiveVoice,
+      includeStyle: options.includeStyle,
+      priority: options.priority,
+      useClientOnly: decision.useClientOnly,
+      reason: decision.reason,
+      textLength: text.length
+    });
 
     // Record cost metrics for the decision
     performanceMonitor.recordCostMetric({
@@ -789,7 +807,21 @@ export class HybridGrammarService {
 
         // Enhance passive voice suggestions with GPT-4o sentence rewrites if enabled
         if (options.enhancePassiveVoice) {
+          console.log('🔄 HYBRID DEBUG: Starting passive voice enhancement', {
+            enhancePassiveVoice: options.enhancePassiveVoice,
+            clientSuggestionsCount: clientSuggestions.length,
+            passiveSuggestions: clientSuggestions.filter(s => s.type === 'passive').length
+          });
+
           const enhancedSuggestions = await this.enhancePassiveVoiceSuggestions(text, clientSuggestions);
+
+          console.log('✅ HYBRID DEBUG: Passive voice enhancement complete', {
+            originalCount: clientSuggestions.length,
+            enhancedCount: enhancedSuggestions.length,
+            changedSuggestions: enhancedSuggestions.filter((s, i) =>
+              s.replacement !== clientSuggestions[i]?.replacement
+            ).length
+          });
 
           const finalResult = {
             ...result,

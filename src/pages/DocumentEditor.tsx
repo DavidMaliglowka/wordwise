@@ -135,7 +135,7 @@ const DocumentEditor: React.FC = () => {
     }
   }, [applySuggestion, editorState.content, checkGrammar, clearSuggestions]);
 
-  // Handle refining a suggestion with GPT-4o
+  // Handle refining a suggestion with GPT-4o (for sidebar - takes EditorSuggestion object)
   const handleRefineSuggestion = useCallback(async (suggestion: EditorSuggestion) => {
     console.log('✨ REFINE DEBUG: Starting GPT-4o refinement', {
       suggestionId: suggestion.id,
@@ -149,6 +149,27 @@ const DocumentEditor: React.FC = () => {
       console.error('❌ REFINE DEBUG: Refinement failed:', error);
     }
   }, [refineSuggestion]);
+
+  // Handle refining a suggestion by ID (for hover card - takes suggestionId string)
+  const handleRefineSuggestionById = useCallback(async (suggestionId: string) => {
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion) {
+      console.error('❌ REFINE DEBUG: Suggestion not found:', suggestionId);
+      return;
+    }
+
+    console.log('✨ REFINE DEBUG: Starting GPT-4o refinement by ID', {
+      suggestionId: suggestion.id,
+      original: suggestion.original
+    });
+
+    try {
+      await refineSuggestion(suggestion.id);
+      console.log('✅ REFINE DEBUG: Refinement completed successfully');
+    } catch (error) {
+      console.error('❌ REFINE DEBUG: Refinement failed:', error);
+    }
+  }, [refineSuggestion, suggestions]);
 
   // Handle regenerating a passive voice suggestion
   const handleRegenerateSuggestion = useCallback(async (suggestionId: string) => {

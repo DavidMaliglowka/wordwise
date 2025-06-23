@@ -232,13 +232,26 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     }
   }, [suggestions]);
 
-  // New: GPT-4o refinement for specific suggestions
+    // New: GPT-4o refinement for specific suggestions (using hybrid service for better results)
   const refineSuggestion = useCallback(async (suggestionId: string) => {
     const suggestion = suggestions.find(s => s.id === suggestionId);
-    if (!suggestion) return;
+    if (!suggestion) {
+      console.error('❌ REFINE DEBUG: Suggestion not found for ID:', suggestionId);
+      return;
+    }
+
+    console.log('🔍 REFINE DEBUG: Starting refinement process', {
+      suggestionId,
+      suggestionType: suggestion.type,
+      original: suggestion.original
+    });
 
     // Check if user is authenticated for GPT-4o refinement
-    if (!GrammarService.isAuthenticated()) {
+    const isAuthenticated = GrammarService.isAuthenticated();
+    console.log('🔐 REFINE DEBUG: Authentication check:', { isAuthenticated });
+
+    if (!isAuthenticated) {
+      console.error('❌ REFINE DEBUG: User not authenticated');
       setError({
         message: 'Please sign in to use AI refinement',
         type: 'auth'
@@ -246,38 +259,44 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
       return;
     }
 
+    console.log('🚀 REFINE DEBUG: Starting refinement process...');
     setIsRefining(true);
 
     try {
-      // Extract context around the suggestion for GPT-4o
-      const contextStart = Math.max(0, suggestion.range.start - 50);
-      const contextEnd = Math.min(lastCheckedText.length, suggestion.range.end + 50);
-      const context = lastCheckedText.slice(contextStart, contextEnd);
+      console.log('🌐 REFINE DEBUG: Calling hybrid grammar service for enhanced refinement...');
 
-      // Call legacy grammar service for GPT-4o refinement
-      const response = await GrammarService.checkGrammar({
-        text: context,
-        language: 'en',
-        includeSpelling: true,
-        includeGrammar: true,
-        includeStyle: true
-      }, false);
+      // Use hybrid service with enhanced passive voice for better results
+      const result = await hybridGrammarService.checkGrammar(lastCheckedText, {
+        includeStyle: true,
+        priority: 'quality',
+        userTier: 'premium',
+        enhancePassiveVoice: true // Enable GPT-4o enhancements
+      });
 
-      // Find refined suggestions that match our original suggestion
-      const refinedSuggestions = response.suggestions.filter(s =>
-        s.range.start >= (suggestion.range.start - contextStart) &&
-        s.range.end <= (suggestion.range.end - contextStart)
+      console.log('📨 REFINE DEBUG: Received response from hybrid service', {
+        suggestionsCount: result.suggestions?.length || 0,
+        responseKeys: Object.keys(result)
+      });
+
+      // Find suggestions that overlap with our target suggestion
+      const refinedSuggestions = result.suggestions.filter(s =>
+        (s.range.start <= suggestion.range.end && s.range.end >= suggestion.range.start) ||
+        s.type === 'passive' || s.type === 'style'
       );
 
+      console.log('🎯 REFINE DEBUG: Found refined suggestions', {
+        totalSuggestions: result.suggestions.length,
+        refinedCount: refinedSuggestions.length,
+        refinedTypes: refinedSuggestions.map(s => s.type)
+      });
+
       if (refinedSuggestions.length > 0) {
-        // Replace the original suggestion with refined ones
-        const editorRefinedSuggestions = GrammarService.createEditorSuggestions(refinedSuggestions)
+        // Convert and replace the original suggestion with refined ones
+        const editorRefinedSuggestions = convertToEditorSuggestions(refinedSuggestions)
           .map(s => ({
             ...s,
-            range: {
-              start: s.range.start + contextStart,
-              end: s.range.end + contextStart
-            }
+            canRegenerate: s.type === 'style' || s.type === 'passive',
+            regenerateId: `refined_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           }));
 
         setSuggestions(prev => [
@@ -290,7 +309,9 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
           refinedSuggestions: prev.refinedSuggestions + refinedSuggestions.length
         }));
 
-        console.log(`✨ Refined suggestion ${suggestionId} with ${refinedSuggestions.length} GPT-4o suggestions`);
+        console.log(`✨ Refined suggestion ${suggestionId} with ${refinedSuggestions.length} enhanced suggestions`);
+      } else {
+        console.log('⚠️ REFINE DEBUG: No refined suggestions found, keeping original');
       }
     } catch (error: any) {
       setError({
@@ -301,15 +322,30 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     } finally {
       setIsRefining(false);
     }
-  }, [suggestions, lastCheckedText]);
+  }, [suggestions, lastCheckedText, convertToEditorSuggestions]);
 
   // New: Regenerate passive voice suggestions specifically
   const regenerateSuggestion = useCallback(async (suggestionId: string) => {
     const suggestion = suggestions.find(s => s.id === suggestionId);
-    if (!suggestion || suggestion.type !== 'style') return;
+    if (!suggestion || (suggestion.type !== 'style' && suggestion.type !== 'passive')) {
+      console.error('❌ REGENERATE DEBUG: Invalid suggestion for regeneration', {
+        suggestionId,
+        suggestionType: suggestion?.type,
+        availableTypes: ['style', 'passive']
+      });
+      return;
+    }
+
+    console.log('🔄 REGENERATE DEBUG: Starting passive voice regeneration', {
+      suggestionId,
+      suggestionType: suggestion.type,
+      original: suggestion.original,
+      proposed: suggestion.proposed
+    });
 
     // Check if user is authenticated for GPT-4o regeneration
     if (!GrammarService.isAuthenticated()) {
+      console.error('❌ REGENERATE DEBUG: User not authenticated');
       setError({
         message: 'Please sign in to use AI regeneration',
         type: 'auth'
@@ -320,6 +356,8 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
     setIsRefining(true);
 
     try {
+      console.log('🌐 REGENERATE DEBUG: Calling hybrid service with enhanced passive voice...');
+
       // Call the hybrid grammar service with enhanced passive voice enabled
       const result = await hybridGrammarService.checkGrammar(lastCheckedText, {
         includeStyle: true,
@@ -328,12 +366,30 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
         enhancePassiveVoice: true
       });
 
-      // Find suggestions that match the regeneration request
-      const newSuggestions = result.suggestions.filter(s =>
-        s.type === 'passive' &&
-        s.range.start >= suggestion.range.start - 10 &&
-        s.range.end <= suggestion.range.end + 10
-      );
+      console.log('📨 REGENERATE DEBUG: Received response from hybrid service', {
+        totalSuggestions: result.suggestions.length,
+        suggestionsTypes: result.suggestions.map(s => s.type),
+        processingMode: result.processingMode
+      });
+
+      // Find suggestions that overlap with our target suggestion or are passive voice
+      const newSuggestions = result.suggestions.filter(s => {
+        const isPassiveType = s.type === 'passive' || s.type === 'style';
+        const overlapsRange = (s.range.start <= suggestion.range.end && s.range.end >= suggestion.range.start);
+        const hasDifferentProposal = s.replacement && s.replacement !== suggestion.original;
+
+        return isPassiveType && (overlapsRange || hasDifferentProposal);
+      });
+
+      console.log('🎯 REGENERATE DEBUG: Filtered regeneration candidates', {
+        candidateCount: newSuggestions.length,
+        candidateDetails: newSuggestions.map(s => ({
+          type: s.type,
+          original: s.flaggedText,
+          replacement: s.replacement,
+          range: s.range
+        }))
+      });
 
       if (newSuggestions.length > 0) {
         const editorSuggestions = convertToEditorSuggestions(newSuggestions)
@@ -349,7 +405,9 @@ export function useHybridGrammarCheck(options: Partial<GrammarCheckOptions> = {}
           ...editorSuggestions
         ]);
 
-        console.log(`🔄 Regenerated suggestion ${suggestionId} with ${newSuggestions.length} new options`);
+        console.log(`✅ REGENERATE DEBUG: Successfully regenerated suggestion ${suggestionId} with ${newSuggestions.length} new options`);
+      } else {
+        console.log('⚠️ REGENERATE DEBUG: No new suggestions found, keeping original');
       }
     } catch (error: any) {
       setError({

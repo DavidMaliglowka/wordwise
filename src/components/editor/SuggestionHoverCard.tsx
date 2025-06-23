@@ -46,7 +46,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
   const { refs, floatingStyles, context, update } = useFloating({
     open: isOpen,
     onOpenChange: (open) => {
-      console.log('🎯 HOVER DEBUG: Floating UI onOpenChange:', { open, currentSuggestion: currentSuggestion?.id });
+
       setIsOpen(open);
       // When the card is closed by any interaction, clear the suggestion data
       if (!open) {
@@ -106,20 +106,11 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
       const target = event.target as HTMLElement;
       const suggestionId = target.dataset.suggestionId;
 
-      console.log('🖱️ HOVER DEBUG: MouseOver event (optimized)', {
-        target: target.tagName,
-        suggestionId,
-        hasSuggestionType: target.hasAttribute('data-suggestion-type'),
-      });
+
 
       if (suggestionId && target.hasAttribute('data-suggestion-type')) {
         const suggestion = getSuggestion(suggestionId);
         if (suggestion) {
-          console.log('🎯 HOVER DEBUG: Setting reference and suggestion', {
-            suggestionId: suggestion.id,
-            targetElement: target.tagName
-          });
-
           // Set the dynamic reference element for positioning
           refs.setReference(target);
           // Set the content for the card
@@ -133,14 +124,10 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     const handleMouseOut = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
 
-      console.log('🖱️ HOVER DEBUG: MouseOut event (optimized)', {
-        target: target.tagName,
-        suggestionId: target.dataset.suggestionId,
-      });
+
 
       // Only trigger leave if we are leaving a suggestion element
       if (target.dataset.suggestionId) {
-        console.log('🔄 HOVER DEBUG: Triggering useHover onMouseLeave');
         // Manually trigger the onMouseLeave handler from the useHover hook
         onMouseLeave?.(event);
       }
@@ -149,7 +136,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     // Scroll listener to keep the card positioned correctly
     const handleScroll = () => {
       if (isOpen) {
-        console.log('📜 HOVER DEBUG: Scroll detected, updating position');
+
         update();
       }
     };
@@ -163,14 +150,14 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     editorElement.addEventListener('mouseout', handleMouseOut);
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
 
-    console.log('🔧 HOVER DEBUG: Event listeners attached to editor element');
+
 
     return () => {
       // Cleanup listeners
       editorElement.removeEventListener('mouseover', handleMouseOver);
       editorElement.removeEventListener('mouseout', handleMouseOut);
       scrollContainer.removeEventListener('scroll', handleScroll);
-      console.log('🧹 HOVER DEBUG: Event listeners cleaned up');
+
     };
   }, [editorElement, getSuggestion, getReferenceProps, refs, update, isOpen]);
 
@@ -247,7 +234,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
     return null;
   }
 
-  console.log('🎨 HOVER DEBUG: Rendering hover card for suggestion', currentSuggestion.id);
+
 
   return (
     <FloatingPortal>
@@ -310,7 +297,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
             {currentSuggestion.proposed && onApplySuggestion && (
               <button
                 onClick={() => {
-                  console.log('🖱️ HOVER DEBUG: Apply button clicked');
+
                   onApplySuggestion(currentSuggestion);
                   setIsOpen(false);
                 }}
@@ -345,7 +332,7 @@ export const SuggestionHoverCard: React.FC<SuggestionHoverCardProps> = ({
              onRegenerateSuggestion && (
               <button
                 onClick={() => {
-                  console.log('🔄 HOVER DEBUG: Regenerate button clicked');
+
                   onRegenerateSuggestion(currentSuggestion.id);
                   // Keep the card open to show new suggestions
                 }}

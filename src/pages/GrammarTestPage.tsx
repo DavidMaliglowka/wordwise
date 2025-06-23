@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthContext } from '../contexts/AuthContext';
-import GrammarTest from '../components/test/GrammarTest';
+import { GrammarTest } from '../components/test/GrammarTest';
 import GrammarIntegrationTest from '../components/test/GrammarIntegrationTest';
 
 const GrammarTestPage: React.FC = () => {
