@@ -1259,7 +1259,7 @@
         "description": "Replace the custom text-splitting approach in GrammarPlugin with Lexical’s official MarkNode utilities to ensure precise and resilient grammar suggestion highlights.",
         "details": "Revamp the current implementation of GrammarPlugin by eliminating its brittle, manual text node traversal and splitting logic. Instead, integrate Lexical’s official utilities (such as $wrapSelectionInMarkNode and $unwrapMarkNode) to apply marks accurately. Implement word-level marking for general grammar suggestions and sentence-level marking for passive voice (as identified in Task 10), ensuring that these marks remain synchronized amid editor mutations, node transformations, and user edits. Preserve existing hover and click interactions along with the CSS styling for highlights. Additionally, address edge cases like overlapping suggestions and ensure that marks are reliably cleared when suggestions are accepted or dismissed.",
         "testStrategy": "Conduct thorough testing by simulating diverse text editing scenarios with both passive voice sentences and standard grammar errors. Verify that marks are applied correctly, remain in sync during rapid typing or node changes, and that hover/click interactions function as expected. Manually test edge cases, including overlapping marks and mark removal when suggestions are applied or dismissed. Use automated tests to simulate mutations and validate that Lexical utilities correctly manage marks under varied editing conditions.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           8,
           10
@@ -1271,7 +1271,7 @@
             "title": "Refactor applyGrammarMark to use $wrapSelectionInMarkNode",
             "description": "Replace manual text splitting logic with Lexical's $wrapSelectionInMarkNode to ensure accurate highlights.",
             "details": "**Problem:** Current applyGrammarMark manually traverses nodes and splits text, leading to misaligned marks.\n\n**Solution:**\n1. Convert plain-text range (start,end) to Lexical selection using `editor.getEditorState().read()` and node/offset mapping helper.\n2. Within `editor.update()`, create a range selection, call `$wrapSelectionInMarkNode(selection,false,'grammar-mark',suggestion.type,suggestion.id)`.\n3. Remove custom splitting code.\n4. Ensure sentence-level selection for passive voice (expand selection to sentence boundaries before wrapping).\n\n**Testing:** Verify highlights align exactly with intended text across edits.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 28
           },
@@ -1280,7 +1280,7 @@
             "title": "Implement mark node transforms to maintain highlights",
             "description": "Add TextNode transform to keep grammar marks updated when text edits occur.",
             "details": "**Problem:** Marks may drift when users edit text inside marked regions.\n\n**Solution:**\n1. Register `editor.registerNodeTransform(TextNode, ...)` in GrammarPlugin.\n2. On text changes, check surrounding nodes for existing GrammarMarkNodes; if marks' range no longer valid or broken word, unwrap or adjust.\n3. Re-run grammar suggestions asynchronously after debounce to reapply accurate marks.\n\n**Testing:** Edit words within marked sentences; ensure highlights adjust or disappear gracefully.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 28
           },
@@ -1289,7 +1289,7 @@
             "title": "Enhance removal logic using $unwrapMarkNode",
             "description": "Use built-in $unwrapMarkNode to remove marks when suggestions resolved.",
             "details": "Replace custom removeGrammarMark with traversal that finds GrammarMarkNode by suggestionId and calls $unwrapMarkNode for accurate removal without manual text mutation.",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 28
           }
@@ -1298,7 +1298,7 @@
     ],
     "metadata": {
       "created": "2025-06-16T19:55:35.907Z",
-      "updated": "2025-06-23T06:59:26.041Z",
+      "updated": "2025-06-23T07:08:34.900Z",
       "description": "Tasks for master context"
     }
   }

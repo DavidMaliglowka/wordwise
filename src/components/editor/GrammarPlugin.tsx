@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getRoot, $getSelection, $setSelection, $isRangeSelection, $createTextNode } from 'lexical';
+import { $getRoot, $getSelection, $setSelection, $isRangeSelection, $createTextNode, $createRangeSelection, $isTextNode, TextNode } from 'lexical';
+import { $wrapSelectionInMarkNode } from '@lexical/mark';
 import { $createGrammarMarkNode, $isGrammarMarkNode, $removeGrammarMark } from './GrammarMarkNode';
 import { EditorSuggestion } from '../../types/grammar';
 
@@ -21,6 +22,30 @@ export function GrammarPlugin({
 }: GrammarPluginProps) {
   const [editor] = useLexicalComposerContext();
   const isApplyingMarks = useRef(false);
+  const reanalysisTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Function to trigger debounced grammar reanalysis
+  const triggerReanalysis = () => {
+    // Clear existing timeout
+    if (reanalysisTimeoutRef.current) {
+      clearTimeout(reanalysisTimeoutRef.current);
+    }
+
+    // Set new timeout for debounced reanalysis
+    reanalysisTimeoutRef.current = setTimeout(() => {
+      console.log('🔄 REANALYSIS DEBUG: Triggering grammar reanalysis after mark changes');
+
+      // Trigger a custom event that the parent component can listen to
+      const event = new CustomEvent('grammarReanalysisNeeded', {
+        detail: { reason: 'markInvalidation' }
+      });
+
+      const rootElement = editor.getRootElement();
+      if (rootElement) {
+        rootElement.dispatchEvent(event);
+      }
+    }, 1000); // 1 second debounce
+  };
 
   // Debug: Log suggestions when they change
   useEffect(() => {
@@ -74,6 +99,85 @@ export function GrammarPlugin({
       }
     });
   }, [suggestions, editor, onMarkApplicationStart, onMarkApplicationEnd]);
+
+  // Register TextNode transform to handle text changes within marked regions
+  useEffect(() => {
+    const unregisterTransform = editor.registerNodeTransform(TextNode, (textNode: TextNode) => {
+      // Check if this text node is within a grammar mark
+      const parent = textNode.getParent();
+
+      if ($isGrammarMarkNode(parent)) {
+        console.log('🔄 TRANSFORM DEBUG: Text changed within grammar mark:', {
+          suggestionId: parent.getSuggestionId(),
+          suggestionType: parent.getSuggestionType(),
+          newText: textNode.getTextContent(),
+          parentTextContent: parent.getTextContent()
+        });
+
+        // Check if the text change invalidates the mark
+        const markText = parent.getTextContent();
+        const suggestionId = parent.getSuggestionId();
+
+        // Find the original suggestion to compare
+        const originalSuggestion = suggestions.find(s => s.id === suggestionId);
+
+        if (originalSuggestion) {
+          // If the marked text no longer matches the original suggestion, remove the mark
+          if (markText !== originalSuggestion.original) {
+            console.log('⚠️ TRANSFORM DEBUG: Mark text no longer matches original, removing mark:', {
+              markText,
+              originalText: originalSuggestion.original,
+              suggestionId
+            });
+
+                         // Unwrap the mark node - replace it with its text content
+             try {
+               const textContent = parent.getTextContent();
+               const newTextNode = $createTextNode(textContent);
+               parent.replace(newTextNode);
+
+               console.log('✅ TRANSFORM DEBUG: Successfully unwrapped invalid mark');
+
+               // Trigger reanalysis after a mark is removed due to text changes
+               triggerReanalysis();
+             } catch (error) {
+               console.error('🚨 TRANSFORM DEBUG: Error unwrapping mark:', error);
+             }
+          }
+        }
+      }
+
+      // Also check if this text node is adjacent to grammar marks that might need adjustment
+      const siblings = textNode.getParent()?.getChildren() || [];
+      const textNodeIndex = siblings.indexOf(textNode);
+
+      // Check previous sibling
+      if (textNodeIndex > 0) {
+        const prevSibling = siblings[textNodeIndex - 1];
+        if ($isGrammarMarkNode(prevSibling)) {
+          // Could implement logic to extend or adjust marks based on text changes
+          console.log('🔍 TRANSFORM DEBUG: Text node adjacent to grammar mark (previous)');
+        }
+      }
+
+      // Check next sibling
+      if (textNodeIndex < siblings.length - 1) {
+        const nextSibling = siblings[textNodeIndex + 1];
+        if ($isGrammarMarkNode(nextSibling)) {
+          // Could implement logic to extend or adjust marks based on text changes
+          console.log('🔍 TRANSFORM DEBUG: Text node adjacent to grammar mark (next)');
+        }
+      }
+    });
+
+    return () => {
+      unregisterTransform();
+      // Clean up any pending reanalysis timeout
+      if (reanalysisTimeoutRef.current) {
+        clearTimeout(reanalysisTimeoutRef.current);
+      }
+    };
+  }, [editor, suggestions, triggerReanalysis]);
 
   // Set up event delegation for hover interactions
   useEffect(() => {
@@ -207,7 +311,7 @@ function clearAllGrammarMarks(): void {
   console.log('🧹 CLEAR DEBUG: Finished clearing all grammar marks');
 }
 
-// Helper function to apply a grammar mark for a suggestion
+// Helper function to apply a grammar mark for a suggestion using Lexical's MarkNode API
 function applyGrammarMark(suggestion: EditorSuggestion): void {
   console.log(`📝 MARK DEBUG: Starting mark application for suggestion:`, {
     id: suggestion.id,
@@ -220,12 +324,6 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
   const root = $getRoot();
   const textContent = root.getTextContent();
 
-  console.log(`📝 MARK DEBUG: Current text content:`, {
-    length: textContent.length,
-    first100chars: textContent.substring(0, 100),
-    targetText: suggestion.original
-  });
-
   // Validate range
   if (suggestion.range.start < 0 ||
       suggestion.range.end > textContent.length ||
@@ -236,14 +334,6 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
     });
     return;
   }
-
-  // Get the exact text at the specified range for verification
-  const rangeText = textContent.substring(suggestion.range.start, suggestion.range.end);
-  console.log(`📝 MARK DEBUG: Range text verification:`, {
-    rangeText,
-    originalText: suggestion.original,
-    matches: rangeText === suggestion.original
-  });
 
   // Enhanced approach: For passive voice, mark the entire sentence
   const isPassiveVoice = suggestion.type === 'passive' || suggestion.type === 'style';
@@ -261,136 +351,184 @@ function applyGrammarMark(suggestion: EditorSuggestion): void {
       sentenceRange: `${targetStart}-${targetEnd}`,
       sentenceText: sentenceInfo.text.substring(0, 100) + (sentenceInfo.text.length > 100 ? '...' : '')
     });
-  } else {
-    console.log(`📝 MARK DEBUG: Standard word-level marking:`, {
-      range: `${targetStart}-${targetEnd}`,
-      text: suggestion.original
-    });
   }
 
-  // ENHANCED: Position-based marking instead of text-based searching
-  function findAndMarkTextByPosition(node: any, currentPosition: number = 0): { found: boolean; newPosition: number } {
-    if (node.getType && node.getType() === 'text') {
-      const nodeText = node.getTextContent();
-      const nodeLength = nodeText.length;
-      const nodeStart = currentPosition;
-      const nodeEnd = currentPosition + nodeLength;
+    try {
+    // Create a range selection for the target text
+    const selection = createSelectionFromTextRange(targetStart, targetEnd);
 
-      console.log(`🔍 MARK DEBUG: Checking text node by position:`, {
-        nodeText: nodeText.substring(0, 50) + (nodeText.length > 50 ? '...' : ''),
-        nodeStart,
-        nodeEnd,
-        targetStart: suggestion.range.start,
-        targetEnd: suggestion.range.end,
-        nodeLength
-      });
+    if (selection) {
+      // Set the selection temporarily
+      $setSelection(selection);
 
-      // Use the updated target range (sentence-level for passive voice)
+      // Create the grammar mark node and wrap the selected text
+      const markNode = $createGrammarMarkNode(['grammar-mark'], suggestion.type, suggestion.id);
 
-      // Does the suggestion range overlap with this text node?
-      if (targetStart < nodeEnd && targetEnd > nodeStart) {
-        console.log(`🎯 MARK DEBUG: Found overlapping text node`);
+      // Get the selected text and wrap it in our mark node
+      if ($isRangeSelection(selection)) {
+        const selectedText = selection.getTextContent();
+        const textNode = $createTextNode(selectedText);
+        markNode.append(textNode);
 
-        try {
-          // Calculate the relative positions within this node
-          const relativeStart = Math.max(0, targetStart - nodeStart);
-          const relativeEnd = Math.min(nodeLength, targetEnd - nodeStart);
+        // Replace the selection with our mark node
+        selection.insertNodes([markNode]);
 
-          console.log(`📍 MARK DEBUG: Relative positions:`, {
-            relativeStart,
-            relativeEnd,
-            textToMark: nodeText.substring(relativeStart, relativeEnd)
-          });
-
-          // Split the text node at the start and end of our target
-          const beforeText = nodeText.substring(0, relativeStart);
-          const markedText = nodeText.substring(relativeStart, relativeEnd);
-          const afterText = nodeText.substring(relativeEnd);
-
-          console.log(`✂️ MARK DEBUG: Splitting text by position:`, {
-            beforeText: beforeText.substring(Math.max(0, beforeText.length - 20)),
-            markedText,
-            afterText: afterText.substring(0, 20)
-          });
-
-          // Create the mark node
-          const markNode = $createGrammarMarkNode(
-            ['grammar-mark'],
-            suggestion.type,
-            suggestion.id
-          );
-
-          // Create a text node for the marked content
-          const markedTextNode = $createTextNode(markedText);
-          markNode.append(markedTextNode);
-
-          // Replace the original node with our new structure
-          if (beforeText || afterText) {
-            // Need to split
-            if (beforeText) {
-              const beforeNode = $createTextNode(beforeText);
-              node.insertBefore(beforeNode);
-            }
-
-            node.insertBefore(markNode);
-
-            if (afterText) {
-              const afterNode = $createTextNode(afterText);
-              node.insertBefore(afterNode);
-            }
-
-            node.remove();
-          } else {
-            // Replace entirely
-            node.replace(markNode);
-          }
-
-          console.log(`✅ MARK DEBUG: Successfully applied position-based mark for "${markedText}"`);
-          return { found: true, newPosition: currentPosition + nodeLength };
-        } catch (error) {
-          console.error(`🚨 MARK DEBUG: Error applying position-based mark:`, error);
-          return { found: false, newPosition: currentPosition + nodeLength };
-        }
+        console.log(`✅ MARK DEBUG: Successfully applied mark using range selection:`, {
+          suggestionId: suggestion.id,
+          selectedText,
+          range: `${targetStart}-${targetEnd}`
+        });
       }
-
-      return { found: false, newPosition: currentPosition + nodeLength };
+    } else {
+      console.warn(`⚠️ MARK DEBUG: Could not create selection for range ${targetStart}-${targetEnd}`);
     }
-
-    // Recursively check children if the node has them
-    if (node.getChildren && typeof node.getChildren === 'function') {
-      try {
-        const children = [...node.getChildren()]; // Create copy to avoid modification issues
-        let position = currentPosition;
-
-        for (const child of children) {
-          const result = findAndMarkTextByPosition(child, position);
-          if (result.found) {
-            return result; // Stop after first match
-          }
-          position = result.newPosition;
-        }
-
-        return { found: false, newPosition: position };
-      } catch (error) {
-        console.error('🚨 MARK DEBUG: Error traversing children:', error);
-        return { found: false, newPosition: currentPosition };
-      }
-    }
-
-    return { found: false, newPosition: currentPosition };
+  } catch (error) {
+    console.error(`🚨 MARK DEBUG: Error applying mark with range selection:`, error);
   }
-
-  const result = findAndMarkTextByPosition(root, 0);
-  console.log(`📝 MARK DEBUG: Position-based mark application result for "${suggestion.original}":`, {
-    success: result.found,
-    suggestionId: suggestion.id,
-    range: suggestion.range
-  });
 }
 
-// Helper function to remove a specific grammar mark
+// Helper function to create a RangeSelection from text offsets
+function createSelectionFromTextRange(startOffset: number, endOffset: number) {
+  const root = $getRoot();
+
+  // Find the text nodes and offsets for start and end positions
+  const startPoint = findTextNodeAndOffset(root, startOffset);
+  const endPoint = findTextNodeAndOffset(root, endOffset);
+
+  if (!startPoint || !endPoint) {
+    console.warn('Could not find text nodes for range', { startOffset, endOffset });
+    return null;
+  }
+
+  // Create a range selection
+  const selection = $createRangeSelection();
+  selection.setTextNodeRange(
+    startPoint.node,
+    startPoint.offset,
+    endPoint.node,
+    endPoint.offset
+  );
+
+  return selection;
+}
+
+// Helper function to find text node and offset for a given absolute text position
+function findTextNodeAndOffset(node: any, targetOffset: number, currentOffset: number = 0): { node: any; offset: number } | null {
+  if ($isTextNode(node)) {
+    const nodeLength = node.getTextContent().length;
+    if (targetOffset <= currentOffset + nodeLength) {
+      // Target is within this text node
+      return {
+        node,
+        offset: targetOffset - currentOffset
+      };
+    }
+    return null;
+  }
+
+  // Traverse children
+  if (node.getChildren && typeof node.getChildren === 'function') {
+    const children = node.getChildren();
+    let offset = currentOffset;
+
+    for (const child of children) {
+      if ($isTextNode(child)) {
+        const childLength = child.getTextContent().length;
+        if (targetOffset <= offset + childLength) {
+          return {
+            node: child,
+            offset: targetOffset - offset
+          };
+        }
+        offset += childLength;
+      } else {
+        const result = findTextNodeAndOffset(child, targetOffset, offset);
+        if (result) {
+          return result;
+        }
+        // Update offset by getting the text content of this non-text node
+        offset += child.getTextContent().length;
+      }
+    }
+  }
+
+  return null;
+}
+
+// Helper function to remove a specific grammar mark by suggestionId
 export function removeGrammarMark(suggestionId: string): void {
-  $removeGrammarMark(suggestionId);
+  console.log(`🗑️ REMOVE DEBUG: Starting removal of grammar mark for suggestion:`, suggestionId);
+
+  const root = $getRoot();
+  let markFound = false;
+
+  function traverseAndRemove(node: any): boolean {
+    if ($isGrammarMarkNode(node)) {
+      const nodeSuggestionId = node.getSuggestionId();
+
+      if (nodeSuggestionId === suggestionId) {
+        console.log(`🎯 REMOVE DEBUG: Found matching grammar mark node:`, {
+          suggestionId: nodeSuggestionId,
+          suggestionType: node.getSuggestionType(),
+          textContent: node.getTextContent()
+        });
+
+        try {
+          // Get the text content from the mark node before removing it
+          const textContent = node.getTextContent();
+
+          if (textContent) {
+            // Create a new text node with the content
+            const textNode = $createTextNode(textContent);
+
+            // Replace the mark node with the plain text node
+            node.replace(textNode);
+            console.log(`✅ REMOVE DEBUG: Successfully unwrapped mark node for suggestion ${suggestionId}`);
+          } else {
+            // If no text content, just remove the empty mark
+            node.remove();
+            console.log(`🗑️ REMOVE DEBUG: Removed empty mark node for suggestion ${suggestionId}`);
+          }
+
+          return true; // Mark found and removed
+        } catch (error) {
+          console.error(`🚨 REMOVE DEBUG: Error removing mark node for suggestion ${suggestionId}:`, error);
+          // Fallback to just removing the node if unwrapping fails
+          try {
+            node.remove();
+            console.log(`🗑️ REMOVE DEBUG: Fallback removal successful for suggestion ${suggestionId}`);
+            return true;
+          } catch (fallbackError) {
+            console.error(`🚨 REMOVE DEBUG: Fallback removal also failed for suggestion ${suggestionId}:`, fallbackError);
+            return false;
+          }
+        }
+      }
+    }
+
+    // Traverse children if the node has them
+    if (typeof node.getChildren === 'function') {
+      const children = node.getChildren();
+      // Create a copy of children array to avoid modification during iteration
+      const childrenCopy = [...children];
+
+      for (const child of childrenCopy) {
+        if (traverseAndRemove(child)) {
+          return true; // Stop after finding and removing the first match
+        }
+      }
+    }
+
+    return false;
+  }
+
+  markFound = traverseAndRemove(root);
+
+  if (markFound) {
+    console.log(`✅ REMOVE DEBUG: Successfully removed grammar mark for suggestion ${suggestionId}`);
+  } else {
+    console.warn(`⚠️ REMOVE DEBUG: No grammar mark found for suggestion ${suggestionId}`);
+  }
 }
 
 // Helper function to check if marks are currently being applied
